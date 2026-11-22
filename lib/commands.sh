@@ -20,6 +20,7 @@ om_status_json() {
   fi
   default="$(om_config_get default_model)"
   jq -n -c \
+    --argjson gpu "$(om_gpu_json)" \
     --arg server "$server" \
     --argjson loaded "$loaded_json" \
     --argjson err "$err" \
@@ -32,7 +33,7 @@ om_status_json() {
       server: $server,
       loaded: $loaded,
       default: (if $default == "null" then null else $default end),
-      gpu: null,
+      gpu: $gpu,
       steam: false
     }'
 }
