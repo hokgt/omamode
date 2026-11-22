@@ -18,6 +18,8 @@ fi
 
 bump=0 # 0 none, 1 patch, 2 minor, 3 major
 while IFS= read -r -d $'\x1e' msg; do
+  # git log puts a newline after each separator; drop leading blank lines.
+  while [[ "$msg" == $'\n'* ]]; do msg="${msg#$'\n'}"; done
   subject="${msg%%$'\n'*}"
   if [[ "$subject" =~ ^[a-z]+(\([^\)]*\))?!: ]] || grep -qE '^BREAKING[ -]CHANGE:' <<<"$msg"; then
     bump=3
