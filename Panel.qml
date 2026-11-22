@@ -21,6 +21,8 @@ Panel {
   readonly property var st: service.status || ({})
   readonly property color fg: root.bar ? root.bar.foreground : Commons.Color.foreground
   readonly property color dim: Qt.darker(fg, 1.4)
+  // The model dropdown while the panel's content is loaded (used by tests).
+  readonly property var modelDropdown: panel.loadedContent ? panel.loadedContent.modelDropdown : null
   readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
 
   Commons.Translations { id: strings; directory: Qt.resolvedUrl("i18n") }
@@ -97,6 +99,7 @@ Panel {
     contentHeight: panel.fittedContentHeight(panel.loadedContentHeight)
 
     content: PanelKeyCatcher {
+      property alias modelDropdown: modelDropdown
       anchors.fill: parent
       implicitHeight: column.implicitHeight
       onCloseRequested: root.close()

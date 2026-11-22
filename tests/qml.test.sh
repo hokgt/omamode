@@ -46,6 +46,10 @@ assert_contains "$out" "selected=B" "dropdown starts on the default"
 assert_contains "$out" "ran=load B" "actions run the CLI"
 assert_file_contains "$T/cli.log" "load B" "CLI received the action as argv"
 assert_contains "$out" "actionError=Another omamode operation is running" "refusal shown in the panel"
+assert_contains "$out" "dropdownOpen=B" "dropdown opens on the default"
+assert_contains "$out" "dropdownPicked=A/A" "a pick updates the selection"
+assert_contains "$out" "dropdownReopen=B" "reopening goes back to the default"
+assert_contains "$out" "dropdownAfterRemoval=B" "a removed pick falls back to the default"
 (( T_FAILS )) && sed -n 1,40p "$T/qs.log" >&2
 [[ -n "${QML_TEST_SHOW:-}" ]] && cat "$T/qs.log"
 
