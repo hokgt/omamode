@@ -20,8 +20,6 @@ ShellRoot {
     id: svc
     cliPath: Quickshell.env("OMAMODE_TEST_CLI")
     runSetup: false
-    onStatusChanged: if (status && status.mode) shell.report()
-    onModelsChanged: if (models && models.length) shell.report()
   }
 
   Panel {
@@ -31,8 +29,7 @@ ShellRoot {
   }
 
   function report() {
-    checks++
-    if (checks < 2 || reported || panel.selectedModel === "") return
+    if (reported || !svc.status.mode || !svc.models.length || panel.selectedModel === "") return
     reported = true
     console.log("mode=" + svc.status.mode)
     console.log("models=" + svc.models.map(function(m) { return m.id }).join(","))
@@ -47,6 +44,8 @@ ShellRoot {
     interval: 800
     onTriggered: { console.log("ran=" + svc.lastArgs.join(" ")); Qt.quit() }
   }
+
+  Timer { interval: 200; running: !shell.reported; repeat: true; onTriggered: shell.report() }
 
   Timer { interval: 8000; running: true; onTriggered: { console.log("timeout"); Qt.quit() } }
 }
