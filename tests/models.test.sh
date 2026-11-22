@@ -37,6 +37,17 @@ assert_eq "true" "$(omamode models --json | jq -r '.[] | select(.id=="big") | .d
 assert_eq "false" "$(omamode models --json | jq -r '.[] | select(.id=="A") | .default')" "not default"
 assert_eq "big" "$(omamode status --json | jq -r .default)" "status default"
 
+# A split model still downloading: missing shards or .part files.
+mkdir -p "$m/dl"
+truncate -s 1G "$m/dl/dl-00001-of-00003.gguf"
+truncate -s 1G "$m/dl/dl-00002-of-00003.gguf.part"
+assert_eq "false" "$(omamode models --json | jq -r '.[] | select(.id=="dl") | .complete')" "downloading model incomplete"
+assert_eq "true" "$(omamode models --json | jq -r '.[] | select(.id=="big") | .complete')" "complete split model"
+assert_eq "true" "$(omamode models --json | jq -r '.[] | select(.id=="A") | .complete')" "single-file model complete"
+assert_contains "$(omamode models)" "(downloading)" "plain listing marks it"
+assert_exit 3 omamode load dl
+assert_contains "$(cat "$T/last.err")" "still downloading" "load refuses incomplete model"
+
 # Human-readable listing.
 assert_contains "$(omamode models)" "big" "plain listing"
 

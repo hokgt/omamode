@@ -64,7 +64,7 @@ om_cmd_models() {
     printf '%s\n' "$json"
     return 0
   fi
-  jq -r '.[] | "\(if .loaded then "*" else " " end) \(.id)  \(.sizeGB // "?") GB\(if .default then "  (default)" else "" end)\(if .fits then "" else "  (too big)" end)\(if .known then "" else "  (new: loads after a server restart)" end)"' <<<"$json"
+  jq -r '.[] | "\(if .loaded then "*" else " " end) \(.id)  \(.sizeGB // "?") GB\(if .default then "  (default)" else "" end)\(if .fits then "" else "  (too big)" end)\(if .complete then "" else "  (downloading)" end)\(if .known or (.complete | not) then "" else "  (new: loads after a server restart)" end)"' <<<"$json"
 }
 
 om_decision_file() { printf '%s/decision\n' "$(om_runtime_dir)"; }
@@ -122,6 +122,7 @@ om_cmd_load() { # [id]
   fi
   [[ "$(om_state_get mode)" == gaming ]] && om_die 3 "Switch to work mode to load a model"
   om_model_exists "$id" || om_die 2 "Unknown model: $id"
+  om_model_complete "$id" || om_die 3 "$id is still downloading (files are incomplete)"
   om_run_job load om_job_load "$id"
 }
 
