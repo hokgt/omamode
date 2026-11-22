@@ -56,12 +56,3 @@ om_fit_check() { # id [freed-bytes]
       exit 3
     }'
 }
-
-om_model_fits() { # id
-  local loaded freed=0
-  loaded="$(om_server_loaded 2>/dev/null)"
-  if [[ -n "$loaded" && "$loaded" != "$1" ]]; then
-    freed="$(om_model_bytes "$loaded")"
-  fi
-  om_fit_check "$1" "${freed:-0}"
-}

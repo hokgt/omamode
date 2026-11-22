@@ -93,30 +93,38 @@ om_model_size_gb() { # id
   awk -v b="$b" 'BEGIN { printf "%.1f\n", b / 1e9 }'
 }
 
-# Hook for the fit check; replaced by lib/memory.sh.
-declare -F om_model_fits >/dev/null || om_model_fits() { return 0; }
-
+# One pass: the folder is scanned once and the server asked once. A model
+# fits when its size plus the context allowance fits in the GPU limit after
+# the currently loaded model (if another one) is freed; same rule as
+# om_fit_check. An unknown limit never blocks.
 om_models_json() {
-  local disk router default fits_list id
+  local disk router default limit used allowance
   disk="$(om_disk_models_json)"
   router="$(om_server_models_json)"
   default="$(om_config_get default_model)"
   [[ "$default" == null ]] && default=""
-  fits_list="$(jq -r '.[].id' <<<"$disk" | while IFS= read -r id; do
-    om_model_fits "$id" >/dev/null 2>&1 && echo "$id"
-  done | jq -R -s -c 'split("\n") | map(select(length > 0))')"
-  jq -n -c --argjson disk "$disk" --argjson router "$router" \
-    --arg default "$default" --argjson fits "$fits_list" '
+  limit="$(om_gpu_limit_bytes 2>/dev/null)"
+  used="$(om_gpu_used_bytes 2>/dev/null)"
+  allowance="$(om_config_get context_allowance_gb)"
+  jq -n -c --argjson disk "$disk" --argjson router "$router" --arg default "$default" \
+    --arg limit "${limit:-}" --arg used "${used:-0}" --argjson allowance "${allowance:-4}" '
     ($router | map({(.id): .status}) | add // {}) as $st
     | ([$disk[].id] + [$router[].id] | unique) as $ids
     | ($disk | map({(.id): .bytes}) | add // {}) as $bytes
     | ($disk | map({(.id): .complete}) | add // {}) as $complete
-    | [ $ids[] as $id | {
+    | ([$router[] | select(.status == "loaded" or .status == "loading") | .id][0]) as $loaded
+    | def fits($id):
+        if $limit == "" or ($bytes[$id] | not) then true
+        else
+          (if $loaded != null and $loaded != $id then ($bytes[$loaded] // 0) else 0 end) as $freed
+          | ($bytes[$id] + $allowance * 1e9) <= (($limit | tonumber) - (($used | tonumber) - $freed))
+        end;
+      [ $ids[] as $id | {
         id: $id,
         sizeGB: (if $bytes[$id] then ($bytes[$id] / 1e8 | round / 10) else null end),
         default: ($id == $default),
         loaded: ($st[$id] == "loaded" or $st[$id] == "loading"),
-        fits: (if $bytes[$id] then ($fits | index($id)) != null else true end),
+        fits: fits($id),
         known: ($st[$id] != null),
         complete: ($complete[$id] != false)
       } ]'

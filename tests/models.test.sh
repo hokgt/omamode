@@ -48,6 +48,20 @@ assert_contains "$(omamode models)" "(downloading)" "plain listing marks it"
 assert_exit 3 omamode load dl
 assert_contains "$(cat "$T/last.err")" "still downloading" "load refuses incomplete model"
 
+# Many models: the list asks the server a fixed number of times, not once
+# per model.
+for i in $(seq 1 20); do truncate -s 1000000 "$m/many-$i.gguf"; done
+real_curl="$(command -v curl)"
+printf '#!/usr/bin/env bash\necho x >>"%s"\nexec "%s" "$@"\n' "$T/curl.count" "$real_curl" >"$T/shim/curl" 2>/dev/null \
+  || { mkdir -p "$T/shim"; printf '#!/usr/bin/env bash\necho x >>"%s"\nexec "%s" "$@"\n' "$T/curl.count" "$real_curl" >"$T/shim/curl"; }
+chmod +x "$T/shim/curl"
+: >"$T/curl.count"
+PATH="$T/shim:$PATH" omamode models --json >/dev/null
+calls=$(wc -l <"$T/curl.count")
+(( calls <= 4 )); assert_eq 0 $? "models --json makes few server calls (made $calls)"
+assert_eq "true" "$(omamode models --json | jq -r '.[] | select(.id=="many-7") | .fits')" "fits still computed"
+rm -f "$m"/many-*.gguf
+
 # Human-readable listing.
 assert_contains "$(omamode models)" "big" "plain listing"
 
