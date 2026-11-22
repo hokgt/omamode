@@ -47,6 +47,11 @@ om_state_live_json() {
   if [[ "$(jq -r .activity <<<"$json")" != idle ]] && { [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; }; then
     json="$(jq -c '.activity = "idle" | .detail = "" | .pid = null' <<<"$json")"
   fi
+  # A job that has just started holds the lock before it records what it is
+  # doing; report it as busy so the panel never shows a gap.
+  if [[ "$(jq -r .activity <<<"$json")" == idle ]] && ! (flock -n 8) 8>>"$(om_lock_file)" 2>/dev/null; then
+    json="$(jq -c '.activity = "working" | .detail = "Working…"' <<<"$json")"
+  fi
   printf '%s\n' "$json"
 }
 

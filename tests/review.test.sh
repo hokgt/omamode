@@ -82,4 +82,11 @@ assert_eq "2" "$(grep -c "Stop the model now" "$T/notify.log")" "prompt repeats 
 omamode decide cancel
 wait "$bg"
 
+# --- live check: a job that has not yet recorded its activity is busy ----
+exec 8>>"$OMAMODE_RUNTIME_DIR/lock"; flock -n 8
+source "$OMAMODE"; om_state_set activity '"idle"'
+assert_eq "working" "$(omamode status --json | jq -r .activity)" "lock held reads as busy"
+flock -u 8; exec 8>&-
+assert_eq "idle" "$(omamode status --json | jq -r .activity)" "idle once the lock is free"
+
 t_done
