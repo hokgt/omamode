@@ -76,6 +76,12 @@ ShellRoot {
         break
       case 4:
         console.log("dropdownAfterRemoval=" + dd.value)
+        console.log("folder=" + panel.modelsFolder)
+        console.log("folderMismatch=" + panel.folderMismatch)
+        panel.setModelsDir("/new/place")
+        break
+      case 5:
+        console.log("ranFolder=" + svc.lastArgs.join(" "))
         stop(); Qt.quit()
         break
       }

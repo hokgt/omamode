@@ -96,6 +96,7 @@ omamode models [--json]          models in the models folder
 omamode load [model]             load a model (the default if omitted); swaps if another is loaded
 omamode unload                   unload the loaded model
 omamode default <model>          set the default model (also pi's default when pi uses llama.cpp)
+omamode models-dir [path]        show the models folder, or set it (--use-server adopts the server's)
 omamode work [--confirmed]       switch to work mode (closes Steam; loads nothing)
 omamode gaming                   switch to gaming mode (unloads the model, opens Steam)
 omamode steam [args...]          start Steam in gaming mode; otherwise offer to switch
@@ -133,6 +134,22 @@ omamode config set server_args '["--jinja","--host","127.0.0.1","-ngl","999","-c
 ```
 
 Runtime state lives in `$XDG_RUNTIME_DIR/omamode/`, which is cleared on reboot. Logs are in `~/.local/state/omamode/`.
+
+### Which models folder is used
+
+- **While llama-server is running,** omamode lists models from the folder the server was started with (its `--models-dir`), since that's the only place it can load from. This works even when another script started the server.
+- **When it isn't running,** omamode uses `models_dir` from its config, and starts the server with that folder.
+- **The panel shows the folder in use.** If the running server uses a different folder from omamode's setting, the panel and `omamode status` say so, and **Use this folder** adopts the server's. **Change…** lets you type a new folder. The same from a terminal:
+
+```bash
+omamode models-dir /mnt/ai-model/llama.cpp
+```
+
+```bash
+omamode models-dir --use-server
+```
+
+- **If the folder is missing,** for example a drive that didn't mount, omamode says `Models folder not found: … (is the drive mounted?)` instead of showing an empty list without explanation. It never scans the disk for other folders.
 
 ### Model folder layout
 

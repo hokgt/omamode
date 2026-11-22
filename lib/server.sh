@@ -76,6 +76,7 @@ om_server_start() {
   port="$(om_config_get port)"
   log="$(om_log_dir)/llama-server.log"
   [[ -x "$bin" ]] || om_die 1 "llama-server not found at $bin (set server_bin in $(om_config_file))"
+  [[ -d "$models" ]] || om_die 1 "Models folder not found: $models (is the drive mounted?)"
   local -a extra
   mapfile -t extra < <(om_config_json | jq -r '.server_args[]?')
   om_spawn "$log" "$bin" --models-dir "$models" --no-models-autoload --port "$port" "${extra[@]}"
@@ -146,4 +147,31 @@ om_server_unload() { # id
   fi
   om_server_wait_status "$id" 120 '^(unloaded|missing|sleeping|failed)$' \
     || om_die 1 "llama-server did not unload $id within 2 minutes"
+}
+
+om_server_port() { om_server_url | sed -E 's#^[a-z]+://[^:/]+:?([0-9]*).*#\1#'; }
+
+# The process listening on the server port (empty when none of ours is).
+om_server_pid() {
+  local port
+  port="$(om_server_port)"
+  [[ -n "$port" ]] || return 0
+  ss -Hltnp "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | head -n1 | cut -d= -f2
+}
+
+# The --models-dir the running server was started with (empty if unknown,
+# e.g. no server, or a single-model server).
+om_server_models_dir() {
+  local pid
+  pid="$(om_server_pid)"
+  [[ -n "$pid" && -r "/proc/$pid/cmdline" ]] || return 0
+  local -a argv
+  mapfile -d '' -t argv <"/proc/$pid/cmdline"
+  local i
+  for (( i = 0; i < ${#argv[@]}; i++ )); do
+    case "${argv[i]}" in
+      --models-dir) printf '%s\n' "${argv[i+1]:-}"; return 0 ;;
+      --models-dir=*) printf '%s\n' "${argv[i]#--models-dir=}"; return 0 ;;
+    esac
+  done
 }

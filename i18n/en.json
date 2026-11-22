@@ -17,5 +17,11 @@
   "action.unload": "Unload",
   "tooltip.work": "Work mode",
   "tooltip.workLoaded": "Work mode · %1",
-  "tooltip.gaming": "Gaming mode"
+  "tooltip.gaming": "Gaming mode",
+  "folder.label": "Models folder: %1",
+  "folder.mismatch": "llama-server was started with this folder; omamode's setting is %1",
+  "folder.useServer": "Use this folder",
+  "folder.change": "Change…",
+  "folder.placeholder": "/path/to/models",
+  "folder.save": "Save"
 }

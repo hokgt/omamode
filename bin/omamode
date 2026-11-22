@@ -27,6 +27,7 @@ Usage: omamode <command> [args]
   load [model]             load a model (the default if omitted); swaps if another is loaded
   unload                   unload the loaded model
   default <model>          set the default model (also pi's default when pi uses llama.cpp)
+  models-dir [path]        show the models folder, or set it (--use-server adopts the server's)
   work [--confirmed]       switch to work mode (closes Steam; loads nothing)
   gaming                   switch to gaming mode (unloads the model, opens Steam)
   steam [args...]          start Steam in gaming mode; otherwise offer to switch

@@ -20,7 +20,13 @@ om_status_json() {
       '{id: $id, sizeGB: (if $s == "" then null else ($s | tonumber) end)}')"
   fi
   default="$(om_config_get default_model)"
+  local mdir
+  mdir="$(om_models_dir_json)"
+  if [[ "$err" == null ]] && [[ "$(jq -r .exists <<<"$mdir")" == false ]]; then
+    err="$(jq -c '"Models folder not found: \(.path) (is the drive mounted?)"' <<<"$mdir")"
+  fi
   jq -n -c \
+    --argjson mdir "$mdir" \
     --argjson state "$state" \
     --argjson gpu "$(om_gpu_json)" \
     --arg server "$server" \
@@ -37,6 +43,7 @@ om_status_json() {
       loaded: $loaded,
       default: (if $default == "null" then null else $default end),
       gpu: $gpu,
+      modelsDir: $mdir,
       steam: $steam
     }'
 }
@@ -53,6 +60,7 @@ om_cmd_status() {
     "Model:   \(if .loaded then "\(.loaded.id) (\(.loaded.sizeGB // "?") GB)" else "none loaded" end)",
     "Default: \(.default // "not set")",
     "Server:  \(.server)",
+    "Folder:  \(.modelsDir.path) (\(.modelsDir.source))\(if .modelsDir.mismatch then " — differs from the configured folder \(.modelsDir.config)" else "" end)",
     (if .activity != "idle" then "Doing:   \(.detail)" else empty end),
     (if .error then "Error:   \(.error)" else empty end)' <<<"$json"
 }
@@ -297,4 +305,31 @@ om_cmd_default() { # id
   om_config_set default_model "$(jq -cn --arg m "$id" '$m')"
   om_info "Default model: $id"
   om_pi_set_default "$id"
+}
+
+# Show or set the models folder.
+#   omamode models-dir [--json]      the folder in use
+#   omamode models-dir <path>        use this folder (must exist)
+#   omamode models-dir --use-server  adopt the running server's folder
+om_cmd_models_dir() {
+  case "${1:-}" in
+    "") om_models_dir ;;
+    --json) om_models_dir_json ;;
+    --use-server)
+      local server
+      server="$(om_server_models_dir)"
+      [[ -n "$server" ]] || om_die 3 "llama-server is not running with a models folder"
+      om_config_set models_dir "$(jq -cn --arg p "$server" '$p')"
+      om_info "Models folder: $server" ;;
+    *)
+      local path="$1"
+      [[ "$path" == "~"* ]] && path="$(om_home)${path:1}"
+      [[ -d "$path" ]] || om_die 2 "Models folder not found: $path"
+      path="$(readlink -f -- "$path")"
+      om_config_set models_dir "$(jq -cn --arg p "$path" '$p')"
+      om_info "Models folder: $path"
+      [[ -n "$(om_server_models_dir)" && "$(readlink -m -- "$(om_server_models_dir)")" != "$path" ]] \
+        && om_info "llama-server is still using $(om_server_models_dir); it uses the new folder after it restarts"
+      return 0 ;;
+  esac
 }

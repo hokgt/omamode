@@ -14,12 +14,37 @@ om_shard_total() { # basename -> MMMMM as a number, or empty
   [[ "$1" =~ -[0-9]{5}-of-([0-9]{5})\.gguf$ ]] && echo $((10#${BASH_REMATCH[1]}))
 }
 
+# The models folder in use: the running server's --models-dir (the router can
+# only load from there), else the configured one (omamode starts the server
+# with it). Never scans the disk for other folders.
+om_models_dir_json() {
+  local config server path source
+  config="$(om_config_get models_dir)"
+  server="$(om_server_models_dir)"
+  if [[ -n "$server" ]]; then path="$server"; source=server; else path="$config"; source=config; fi
+  local rc rs
+  rc="$(readlink -m -- "$config")"
+  rs="$(readlink -m -- "${server:-$config}")"
+  jq -cn --arg path "$path" --arg source "$source" --arg config "$config" --arg server "$server" \
+    --argjson mismatch "$([[ -n "$server" && "$rc" != "$rs" ]] && echo true || echo false)" \
+    --argjson exists "$([[ -d "$path" ]] && echo true || echo false)" \
+    '{path: $path, source: $source, config: $config,
+      server: (if $server == "" then null else $server end),
+      mismatch: $mismatch, exists: $exists}'
+}
+
+om_models_dir() {
+  local server
+  server="$(om_server_models_dir)"
+  if [[ -n "$server" ]]; then printf '%s\n' "$server"; else om_config_get models_dir; fi
+}
+
 # One "id<TAB>bytes<TAB>complete" line per model in models_dir. A model is
 # incomplete while it is still downloading: a partial file sits beside it,
 # or a split model has fewer shards than its names say.
 om_disk_models() {
   local dir f base id bytes total
-  dir="$(om_config_get models_dir)"
+  dir="$(om_models_dir)"
   [[ -d "$dir" ]] || return 0
   declare -A sizes=() shards=() want=() partial=()
   for f in "$dir"/*.gguf "$dir"/*.gguf.part "$dir"/*.gguf.partial "$dir"/*.gguf.download; do
@@ -103,6 +128,7 @@ om_models_json() {
   local disk router default limit used allowance
   disk="$(om_disk_models_json)"
   router="$(om_server_models_json)"
+  [[ -d "$(om_models_dir)" ]] || router='[]'
   default="$(om_config_get default_model)"
   [[ "$default" == null ]] && default=""
   limit="$(om_gpu_limit_bytes 2>/dev/null)"

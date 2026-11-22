@@ -120,6 +120,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, required=True)
     ap.add_argument("--single-model", action="store_true")
+    # Accepted (and ignored) so the process command line looks like a router's.
+    ap.add_argument("--models-dir")
     args = ap.parse_args()
     SINGLE = args.single_model
     ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()

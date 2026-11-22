@@ -21,6 +21,18 @@ Panel {
   readonly property var st: service.status || ({})
   readonly property color fg: root.bar ? root.bar.foreground : Commons.Color.foreground
   readonly property color dim: Qt.darker(fg, 1.4)
+  readonly property var modelsDirInfo: st.modelsDir || ({})
+  readonly property string modelsFolder: modelsDirInfo.path || ""
+  readonly property bool folderMismatch: modelsDirInfo.mismatch === true
+  property bool editingFolder: false
+
+  function setModelsDir(path) {
+    var p = String(path || "").trim()
+    if (p === "") return
+    editingFolder = false
+    service.run(["models-dir", p])
+  }
+
   // The model dropdown while the panel's content is loaded (used by tests).
   readonly property var modelDropdown: panel.loadedContent ? panel.loadedContent.modelDropdown : null
   readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
@@ -54,7 +66,7 @@ Panel {
 
   // The dropdown always starts on the default model.
   function resetSelection() { selectedModel = defaultModel() }
-  onOpenedChanged: if (opened) { resetSelection(); service.refresh() }
+  onOpenedChanged: if (opened) { resetSelection(); editingFolder = false; service.refresh() }
   Connections {
     target: root.service
     function onModelsChanged() { if (root.selectedModel === "" || !root.modelInfo(root.selectedModel)) root.resetSelection() }
@@ -238,6 +250,81 @@ Panel {
             enabled: !root.busy && !!root.service.loaded
             opacity: enabled ? 1.0 : 0.5
             onClicked: root.service.run(["unload"])
+          }
+        }
+
+        // ---------- Models folder ----------
+        Column {
+          width: parent.width
+          spacing: Style.space(6)
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            text: strings.t("folder.label").arg(root.modelsFolder || "—")
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideMiddle
+          }
+
+          Text {
+            visible: root.folderMismatch
+            width: parent.width
+            textFormat: Text.PlainText
+            text: strings.t("folder.mismatch").arg(root.modelsDirInfo.config || "")
+            color: Commons.Color.urgent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.Wrap
+          }
+
+          Row {
+            spacing: Style.space(8)
+            visible: !root.editingFolder
+
+            Button {
+              visible: root.folderMismatch
+              text: strings.t("folder.useServer")
+              bordered: true
+              foreground: root.fg
+              fontFamily: root.fontFamily
+              enabled: !root.busy
+              opacity: enabled ? 1.0 : 0.5
+              onClicked: root.service.run(["models-dir", "--use-server"])
+            }
+
+            Button {
+              text: strings.t("folder.change")
+              bordered: true
+              foreground: root.fg
+              fontFamily: root.fontFamily
+              enabled: !root.busy
+              opacity: enabled ? 1.0 : 0.5
+              onClicked: { folderField.text = root.modelsDirInfo.config || root.modelsFolder; root.editingFolder = true; folderField.forceActiveFocus() }
+            }
+          }
+
+          Row {
+            spacing: Style.space(8)
+            visible: root.editingFolder
+            width: parent.width
+
+            TextField {
+              id: folderField
+              width: parent.width - saveFolder.width - Style.space(8)
+              placeholderText: strings.t("folder.placeholder")
+              onAccepted: root.setModelsDir(text)
+            }
+
+            Button {
+              id: saveFolder
+              text: strings.t("folder.save")
+              bordered: true
+              foreground: root.fg
+              fontFamily: root.fontFamily
+              onClicked: root.setModelsDir(folderField.text)
+            }
           }
         }
 
