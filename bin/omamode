@@ -58,7 +58,8 @@ om_main() {
     __job)
       local fn="${1:-}"; shift || true
       [[ "$fn" == om_job_* ]] && declare -F "$fn" >/dev/null || om_die 2 "unknown job: $fn"
-      om_with_lock "$fn" "$@" ;;
+      om_take_lock
+      "$fn" "$@" ;;
     *)
       local fn="om_cmd_${cmd//-/_}"
       if [[ "$cmd" =~ ^[a-z][a-z-]*$ ]] && declare -F "$fn" >/dev/null; then

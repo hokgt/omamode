@@ -26,11 +26,19 @@ om_pi_set_default() { # id
     om_info "pi uses ${provider:-no default provider}; pi settings left alone"
     return 0
   fi
-  if ! cp -p "$f" "$f.omamode-bak"; then
+  if ! cp -pL "$f" "$f.omamode-bak"; then
     om_info "pi settings not updated: could not back up $f"
     return 0
   fi
-  if jq --arg m "$id" '.defaultModel = $m' "$f" | om_write_file "$f"; then
+  # Build the new content first; write only if it is valid JSON. Writing in
+  # place (not a rename) keeps the file's mode and any symlink.
+  local updated
+  updated="$(jq --arg m "$id" '.defaultModel = $m' "$f" 2>/dev/null)"
+  if [[ -z "$updated" ]] || ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$updated"; then
+    om_info "pi settings not updated: could not read $f"
+    return 0
+  fi
+  if printf '%s\n' "$updated" >"$f"; then
     om_info "pi's default model is now $id"
   else
     om_info "pi settings not updated: could not write $f"

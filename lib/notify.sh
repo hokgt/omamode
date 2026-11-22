@@ -12,8 +12,8 @@ om_notify() {
     notifier="notify-send"
     # notify-send has no exec buttons; drop them.
     local args=("$1" "${2:-}")
-    "$notifier" -a omamode "${args[@]}" >/dev/null 2>&1 || true
+    "$notifier" -a omamode "${args[@]}" >/dev/null 2>&1 9>&- || true
     return 0
   fi
-  "$notifier" --app-name omamode -g 󰧑 "$@" >/dev/null 2>&1 || true
+  "$notifier" --app-name omamode -g 󰧑 "$@" >/dev/null 2>&1 9>&- || true
 }

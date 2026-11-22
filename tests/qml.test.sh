@@ -24,6 +24,7 @@ printf '%s\n' "$*" >>"$T/cli.log"
 case "$1 ${2:-}" in
   "status --json") echo '{"mode":"work","activity":"idle","detail":"","error":null,"server":"running","loaded":{"id":"A","sizeGB":22.1},"default":"B","gpu":{"limitGB":65.2,"usedGB":24},"steam":false}' ;;
   "models --json") echo '[{"id":"A","sizeGB":22.1,"default":false,"loaded":true,"fits":true,"known":true,"complete":true},{"id":"B","sizeGB":20,"default":true,"loaded":false,"fits":true,"known":true,"complete":true}]' ;;
+  "load B") echo "omamode: Another omamode operation is running" >&2; exit 3 ;;
   *) echo ok ;;
 esac
 STUB
@@ -44,6 +45,7 @@ assert_contains "$out" "icon=󰧑" "work-mode icon"
 assert_contains "$out" "selected=B" "dropdown starts on the default"
 assert_contains "$out" "ran=load B" "actions run the CLI"
 assert_file_contains "$T/cli.log" "load B" "CLI received the action as argv"
+assert_contains "$out" "actionError=Another omamode operation is running" "refusal shown in the panel"
 (( T_FAILS )) && sed -n 1,40p "$T/qs.log" >&2
 [[ -n "${QML_TEST_SHOW:-}" ]] && cat "$T/qs.log"
 

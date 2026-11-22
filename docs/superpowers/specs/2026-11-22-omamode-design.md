@@ -322,9 +322,9 @@ message from goal 9, including both numbers.
   `defaultProvider` is the local llama.cpp provider, also sets pi's
   `defaultModel` in `~/.pi/agent/settings.json`. The edit changes only that
   key, keeps the rest of the file as it is, and makes a backup first.
-- If the model is not yet known to pi's llama.cpp provider, register it
-  the way pi expects for that provider (to be confirmed during build from
-  pi's models documentation), so pi can select it.
+- No registration is needed: pi's llama.cpp provider discovers models
+  from the router itself (pi lists a llama.cpp model once the router has
+  it loaded). Confirmed from pi's documentation during the build.
 - If pi's default provider is remote, pi's settings are left alone; the
   pi prompt still loads whichever local model pi asks for.
 

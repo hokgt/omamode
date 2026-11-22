@@ -42,31 +42,45 @@ om_write_file() { # path
 
 om_lock_file() { printf '%s/lock\n' "$(om_runtime_dir)"; }
 
-# True when no omamode operation holds the lock.
-om_lock_free() {
-  local f
-  f="$(om_lock_file)"
-  (flock -n 9) 9>>"$f"
+# The operation lock is held on fd 9. Programs omamode starts (Steam,
+# llama-server, notifications) must never inherit it: spawn them with 9>&-
+# (see om_spawn), or the lock would outlive the operation.
+
+# Take the lock (non-blocking). If fd 9 is already open and locked (a job
+# started by om_run_job inherits it), this succeeds on the same lock.
+om_take_lock() {
+  if ! { : >&9; } 2>/dev/null; then
+    exec 9>>"$(om_lock_file)"
+  fi
+  flock -n 9 || om_die 3 "Another omamode operation is running"
 }
 
-# Run a command while holding the operation lock (non-blocking).
+# Run a command while holding the operation lock.
 om_with_lock() {
-  exec 9>>"$(om_lock_file)"
-  flock -n 9 || om_die 3 "Another omamode operation is running"
+  om_take_lock
   "$@"
 }
 
+# Start a program detached from omamode, without the lock fd.
+om_spawn() { # log-file command args...
+  local log="$1"; shift
+  setsid "$@" >>"$log" 2>&1 </dev/null 9>&- &
+  disown 2>/dev/null || true
+}
+
 # Run a job function (om_job_*) under the lock, detached from the caller so
-# it keeps going when the panel or terminal closes. Inline when
-# OMAMODE_FOREGROUND=1 (tests, and the pi extension waiting for a load).
+# it keeps going when the panel or terminal closes. The caller takes the
+# lock first, so a second operation is refused right away, and the job
+# inherits it. Inline when OMAMODE_FOREGROUND=1 (tests).
 om_run_job() { # name function args...
   local name="$1"; shift
-  om_lock_free || om_die 3 "Another omamode operation is running"
+  om_take_lock
   if [[ "${OMAMODE_FOREGROUND:-0}" == 1 ]]; then
-    om_with_lock "$@"
+    "$@"
     return
   fi
   setsid "$OM_SELF" __job "$@" >>"$(om_log_dir)/$name.log" 2>&1 </dev/null &
   disown 2>/dev/null || true
+  exec 9>&-
   om_info "Started $name in the background"
 }

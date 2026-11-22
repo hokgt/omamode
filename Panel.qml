@@ -232,10 +232,11 @@ Panel {
 
         // ---------- Last error ----------
         Text {
-          visible: !!root.st.error
+          readonly property string message: root.service.actionError || root.st.error || ""
+          visible: message !== ""
           width: parent.width
           textFormat: Text.PlainText
-          text: root.st.error || ""
+          text: message
           color: Commons.Color.error !== undefined ? Commons.Color.error : root.fg
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption

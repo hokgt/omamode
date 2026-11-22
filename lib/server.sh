@@ -32,7 +32,7 @@ om_http_error_message() { # body
 om_server_state() {
   om_http GET /health "" 2 >/dev/null || { echo stopped; return; }
   local body
-  if body="$(om_http GET /models "" 3)" && jq -e '.data | type == "array"' >/dev/null 2>&1 <<<"$body"; then
+  if body="$(om_http GET /models "" 3)" && jq -e '.data | type == "array" and all(.[]; (.status | type) == "object")' >/dev/null 2>&1 <<<"$body"; then
     echo running
   else
     echo not-router
@@ -78,10 +78,8 @@ om_server_start() {
   [[ -x "$bin" ]] || om_die 1 "llama-server not found at $bin (set server_bin in $(om_config_file))"
   local -a extra
   mapfile -t extra < <(om_config_json | jq -r '.server_args[]?')
-  setsid "$bin" --models-dir "$models" --no-models-autoload --port "$port" "${extra[@]}" \
-    >>"$log" 2>&1 </dev/null &
+  om_spawn "$log" "$bin" --models-dir "$models" --no-models-autoload --port "$port" "${extra[@]}"
   echo $! >"$(om_server_pid_file)"
-  disown 2>/dev/null || true
   local i
   for i in $(seq 60); do
     [[ "$(om_server_state)" == running ]] && return 0

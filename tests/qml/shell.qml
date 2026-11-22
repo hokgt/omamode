@@ -42,7 +42,7 @@ ShellRoot {
   Timer {
     id: actionCheck
     interval: 800
-    onTriggered: { console.log("ran=" + svc.lastArgs.join(" ")); Qt.quit() }
+    onTriggered: { console.log("ran=" + svc.lastArgs.join(" ")); console.log("actionError=" + svc.actionError); Qt.quit() }
   }
 
   Timer { interval: 200; running: !shell.reported; repeat: true; onTriggered: shell.report() }

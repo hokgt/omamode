@@ -33,18 +33,17 @@ om_steam_start() { # [args...]
   local bin
   bin="$(om_steam_bin)"
   if [[ -z "${OMAMODE_STEAM_BIN:-}" ]] && command -v uwsm-app >/dev/null 2>&1; then
-    setsid uwsm-app -- "$bin" "$@" >/dev/null 2>&1 </dev/null &
+    om_spawn /dev/null uwsm-app -- "$bin" "$@"
   else
-    setsid "$bin" "$@" >/dev/null 2>&1 </dev/null &
+    om_spawn /dev/null "$bin" "$@"
   fi
-  disown 2>/dev/null || true
 }
 
 # Ask Steam to quit and wait for it. Never force-kills.
 om_steam_shutdown() {
   local timeout="${OMAMODE_STEAM_CLOSE_TIMEOUT:-30}" start
   om_steam_running || return 0
-  "$(om_steam_bin)" -shutdown >/dev/null 2>&1 </dev/null &
+  om_spawn /dev/null "$(om_steam_bin)" -shutdown
   start="$(date +%s)"
   while om_steam_running; do
     (( $(date +%s) - start >= timeout )) && return 1

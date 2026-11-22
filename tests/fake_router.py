@@ -61,7 +61,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, STATE)
             if url.path == "/models":
                 if SINGLE:
-                    return self.send_json(404, {"error": {"code": 404, "message": "File Not Found"}})
+                    # A real single-model llama-server lists its one model
+                    # without router status.
+                    return self.send_json(200, {"object": "list", "data": [{"id": "single", "object": "model"}]})
                 data = [
                     {"id": m, "object": "model", "status": {"value": status_of(m)}}
                     for m in STATE["models"]

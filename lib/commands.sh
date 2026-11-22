@@ -80,7 +80,7 @@ om_cmd_decide() { # stop|wait|cancel
 # Wait until the model has no request in flight. After wait_timeout, ask the
 # user. Returns 0 to go ahead; exits 3 if the user cancels.
 om_wait_idle() { # model-id
-  local id="$1" timeout start decision
+  local id="$1" timeout start decision asked_at=0
   om_server_busy "$id" || return 0
   timeout="$(om_config_get wait_timeout)"
   rm -f "$(om_decision_file)"
@@ -88,8 +88,8 @@ om_wait_idle() { # model-id
   start="$(date +%s)"
   while om_server_busy "$id"; do
     if (( $(date +%s) - start >= timeout )); then
-      if [[ ! -e "$(om_decision_file).asked" ]]; then
-        : >"$(om_decision_file).asked"
+      if (( $(date +%s) - asked_at >= timeout )); then
+        asked_at="$(date +%s)"
         om_notify "The local model is still answering" \
           "pi has been busy for $timeout s. Stop it now, or keep waiting?" \
           --action "Keep waiting" "$OM_SELF" decide wait \
@@ -98,15 +98,15 @@ om_wait_idle() { # model-id
       fi
       decision="$(cat "$(om_decision_file)" 2>/dev/null)"
       case "$decision" in
-        stop) rm -f "$(om_decision_file)" "$(om_decision_file).asked"; return 0 ;;
-        wait) rm -f "$(om_decision_file)" "$(om_decision_file).asked"; start="$(date +%s)" ;;
-        cancel) rm -f "$(om_decision_file)" "$(om_decision_file).asked"
+        stop) rm -f "$(om_decision_file)"; return 0 ;;
+        wait) rm -f "$(om_decision_file)"; start="$(date +%s)"; asked_at=0 ;;
+        cancel) rm -f "$(om_decision_file)"
                 om_fail "Cancelled; nothing was unloaded" 3 ;;
       esac
     fi
     sleep "$(om_poll_interval)"
   done
-  rm -f "$(om_decision_file)" "$(om_decision_file).asked"
+  rm -f "$(om_decision_file)"
   return 0
 }
 
@@ -163,6 +163,7 @@ om_job_load() { # id
 }
 
 om_cmd_unload() {
+  [[ "$(om_server_state)" == not-router ]] && om_die 3 "$om_not_router_msg"
   if [[ "$(om_server_state)" != running || -z "$(om_server_loaded)" ]]; then
     om_info "No model loaded"
     return 0
@@ -185,7 +186,10 @@ om_job_unload() {
   om_info "Unloaded $loaded"
 }
 
+om_not_router_msg="llama-server is not in router mode, so omamode cannot see or unload its model; stop it and let omamode start it"
+
 om_cmd_gaming() {
+  [[ "$(om_server_state)" == not-router ]] && om_die 3 "$om_not_router_msg"
   if [[ "$(om_state_get mode)" == gaming ]] && om_steam_running; then
     om_info "Already in gaming mode"
     return 0

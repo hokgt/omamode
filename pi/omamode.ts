@@ -55,6 +55,35 @@ export function label(option: Option, model: string): string {
   }
 }
 
+export type LoadResult = { kind: "loaded" } | { kind: "error"; message: string } | { kind: "timeout" };
+
+// Wait for omamode's load job to finish. Ends on success, on an error, when
+// the job stops without loading the model, or at the deadline (the CLI's
+// own load cap is 10 minutes), so pi is never blocked forever.
+export async function waitForLoad(
+  getStatus: () => Promise<Status | null>,
+  model: string,
+  opts: { intervalMs?: number; deadlineMs?: number; onDetail?: (detail: string) => void } = {},
+): Promise<LoadResult> {
+  const interval = opts.intervalMs ?? 2000;
+  const deadline = Date.now() + (opts.deadlineMs ?? 12 * 60 * 1000);
+  let seenBusy = false;
+  while (Date.now() < deadline) {
+    const s = await getStatus();
+    if (!s) return { kind: "error", message: "omamode stopped responding" };
+    if (s.loaded?.id === model && s.activity === "idle") return { kind: "loaded" };
+    if (s.error) return { kind: "error", message: s.error };
+    if (s.activity !== "idle") {
+      seenBusy = true;
+      if (s.detail && opts.onDetail) opts.onDetail(String(s.detail));
+    } else if (seenBusy) {
+      return { kind: "error", message: `the load ended without loading ${model}` };
+    }
+    await new Promise((r) => setTimeout(r, interval));
+  }
+  return { kind: "timeout" };
+}
+
 function findOmamode(): string | null {
   const wrapper = join(homedir(), ".local", "bin", "omamode");
   if (existsSync(wrapper)) return wrapper;
@@ -138,21 +167,17 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify(`omamode: ${(r.stderr || r.stdout).trim() || "could not load the model"}`, "error");
         return;
       }
-      for (;;) {
-        await sleep(2000);
-        const s = await status(cli);
-        if (!s) break;
-        if (s.loaded?.id === d.model && s.activity === "idle") {
-          const m = ctx.modelRegistry?.find?.(LOCAL_PROVIDER, d.model);
-          if (m && ctx.model?.id !== d.model) await pi.setModel(m);
-          ctx.ui.notify(`omamode: ${d.model} is loaded`, "info");
-          break;
-        }
-        if (s.error) {
-          ctx.ui.notify(`omamode: ${s.error}`, "error");
-          break;
-        }
-        if (s.detail) ctx.ui.setStatus("omamode", s.detail);
+      const res = await waitForLoad(() => status(cli), d.model, {
+        onDetail: (detail) => ctx.ui.setStatus("omamode", detail),
+      });
+      if (res.kind === "loaded") {
+        const m = ctx.modelRegistry?.find?.(LOCAL_PROVIDER, d.model);
+        if (m && ctx.model?.id !== d.model) await pi.setModel(m);
+        ctx.ui.notify(`omamode: ${d.model} is loaded`, "info");
+      } else if (res.kind === "error") {
+        ctx.ui.notify(`omamode: ${res.message}`, "error");
+      } else {
+        ctx.ui.notify(`omamode: ${d.model} did not finish loading; check the omamode panel`, "error");
       }
     } catch (err) {
       try { ctx.ui?.notify?.(`omamode: ${String(err)}`, "error"); } catch { /* never break pi */ }

@@ -19,6 +19,9 @@ Item {
   property var status: ({})
   property var models: []
   property var lastArgs: []
+  // Why the last action was refused or failed before it could start (for
+  // example "Another omamode operation is running"); empty when it started.
+  property string actionError: ""
 
   readonly property string mode: status && status.mode ? status.mode : "work"
   readonly property bool busy: !!(status && status.activity && status.activity !== "idle")
@@ -39,9 +42,15 @@ Item {
   }
 
   function run(args) {
+    if (actionProc.running) {
+      actionError = "omamode is still starting the previous action"
+      return
+    }
     lastArgs = args
+    actionError = ""
+    actionProc.errText = ""
     actionProc.command = [cliPath].concat(args)
-    if (!actionProc.running) actionProc.running = true
+    actionProc.running = true
     refreshSoon.restart()
   }
 
@@ -59,7 +68,15 @@ Item {
 
   Process {
     id: actionProc
-    onExited: root.refresh()
+    property string errText: ""
+    stderr: StdioCollector { waitForEnd: true; onStreamFinished: actionProc.errText = text }
+    onExited: function(code) {
+      if (code !== 0) {
+        var msg = String(actionProc.errText || "").trim().replace(/^omamode: /, "")
+        root.actionError = msg !== "" ? msg : "omamode exited with code " + code
+      }
+      root.refresh()
+    }
   }
 
   Process {

@@ -51,3 +51,31 @@ test("no model id known: fall back to omamode's default", () => {
 test("no model id and no default: skip", () => {
   assert.deepEqual(decide(status({ default: null }), "llama.cpp", undefined), { kind: "skip" });
 });
+
+import { waitForLoad } from "../pi/omamode.ts";
+
+const seq = (items: Array<Record<string, unknown> | null>) => {
+  let i = 0;
+  return async () => (items[Math.min(i++, items.length - 1)] as any);
+};
+const fast = { intervalMs: 1, deadlineMs: 200 };
+
+test("waitForLoad: loaded and idle", async () => {
+  const r = await waitForLoad(seq([status({ activity: "loading" }), status({ loaded: { id: "A", sizeGB: 1 } })]), "A", fast);
+  assert.equal(r.kind, "loaded");
+});
+
+test("waitForLoad: error reported", async () => {
+  const r = await waitForLoad(seq([status({ activity: "loading" }), status({ error: "boom" })]), "A", fast);
+  assert.deepEqual(r, { kind: "error", message: "boom" });
+});
+
+test("waitForLoad: job ended without loading the model", async () => {
+  const r = await waitForLoad(seq([status({ activity: "loading" }), status({ loaded: { id: "B", sizeGB: 1 } })]), "A", fast);
+  assert.equal(r.kind, "error");
+});
+
+test("waitForLoad: never started stops at the deadline", async () => {
+  const r = await waitForLoad(seq([status()]), "A", fast);
+  assert.equal(r.kind, "timeout");
+});

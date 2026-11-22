@@ -45,6 +45,17 @@ assert_exit 0 omamode default A
 cmp -s "$pi" "$T/pi.broken"; assert_eq 0 $? "broken file untouched"
 assert_contains "$(cat "$T/last.out")" "pi settings not updated" "broken explained"
 
+# A symlinked settings.json (dotfiles) stays a symlink and keeps its mode.
+mkdir -p "$T/dotfiles"
+printf '{"defaultProvider": "llama.cpp", "defaultModel": "A", "theme": "x"}\n' >"$T/dotfiles/settings.json"
+chmod 644 "$T/dotfiles/settings.json"
+rm -f "$pi"; ln -s "$T/dotfiles/settings.json" "$pi"
+assert_exit 0 omamode default B
+[[ -L "$pi" ]]; assert_eq 0 $? "settings.json is still a symlink"
+assert_eq "B" "$(jq -r .defaultModel "$T/dotfiles/settings.json")" "target updated"
+assert_eq "644" "$(stat -c %a "$T/dotfiles/settings.json")" "mode kept"
+assert_eq "x" "$(jq -r .theme "$T/dotfiles/settings.json")" "other keys kept"
+
 assert_exit 2 omamode default nope
 assert_exit 2 omamode default
 
