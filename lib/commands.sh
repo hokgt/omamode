@@ -272,3 +272,12 @@ om_cmd_steam_detected() {
   printf '%s\n' "$pid" >"$marker"
   om_steam_prompt
 }
+
+om_cmd_default() { # id
+  local id="${1:-}"
+  [[ -n "$id" ]] || om_die 2 "usage: omamode default <model>"
+  om_model_exists "$id" || om_die 2 "Unknown model: $id"
+  om_config_set default_model "$(jq -cn --arg m "$id" '$m')"
+  om_info "Default model: $id"
+  om_pi_set_default "$id"
+}
