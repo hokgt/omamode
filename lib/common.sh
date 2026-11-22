@@ -23,6 +23,7 @@ om_poll_interval() { printf '%s\n' "${OMAMODE_POLL:-2}"; }
 om_die() { # code message
   local code="$1"; shift
   printf 'omamode: %s\n' "$*" >&2
+  if declare -F om_on_die >/dev/null; then om_on_die "$code" "$*"; fi
   exit "$code"
 }
 
