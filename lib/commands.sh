@@ -27,6 +27,7 @@ om_status_json() {
     --argjson loaded "$loaded_json" \
     --argjson err "$err" \
     --arg default "$default" \
+    --argjson steam "$(om_steam_running && echo true || echo false)" \
     '{
       mode: $state.mode,
       activity: $state.activity,
@@ -36,7 +37,7 @@ om_status_json() {
       loaded: $loaded,
       default: (if $default == "null" then null else $default end),
       gpu: $gpu,
-      steam: false
+      steam: $steam
     }'
 }
 
@@ -181,4 +182,92 @@ om_job_unload() {
   om_server_unload "$loaded"
   om_activity idle
   om_info "Unloaded $loaded"
+}
+
+om_cmd_gaming() {
+  if [[ "$(om_state_get mode)" == gaming ]] && om_steam_running; then
+    om_info "Already in gaming mode"
+    return 0
+  fi
+  om_run_job gaming om_job_gaming
+}
+
+om_job_gaming() {
+  local loaded=""
+  om_job_begin
+  [[ "$(om_server_state)" == running ]] && loaded="$(om_server_loaded)"
+  if [[ -n "$loaded" ]]; then
+    om_wait_idle "$loaded"
+    om_activity unloading "Unloading $loaded…"
+    om_server_unload "$loaded"
+  fi
+  om_state_set mode '"gaming"'
+  if ! om_steam_running; then
+    om_activity starting-steam "Opening Steam…"
+    om_steam_start
+  fi
+  om_activity idle
+  om_notify "Gaming mode" "Gaming mode: model unloaded, opening Steam."
+  om_info "Gaming mode"
+}
+
+om_cmd_work() { # [--confirmed]
+  local confirmed=0
+  [[ "${1:-}" == --confirmed ]] && confirmed=1
+  if [[ "$(om_state_get mode)" == gaming ]] && (( ! confirmed )) && [[ -n "$(om_game_windows)" ]]; then
+    om_notify "A game is running" "A game is running. Close Steam and the game?" \
+      --action "Cancel" /usr/bin/true \
+      --action "Close and switch" "$OM_SELF" work --confirmed
+    om_die 3 "A game is running; confirm with: omamode work --confirmed"
+  fi
+  if [[ "$(om_state_get mode)" == work ]] && ! om_steam_running; then
+    om_info "Already in work mode"
+    return 0
+  fi
+  om_run_job work om_job_work
+}
+
+om_job_work() {
+  local had_steam=0
+  om_job_begin
+  if om_steam_running; then
+    had_steam=1
+    om_activity closing-steam "Closing Steam…"
+    om_steam_shutdown || om_fail "Steam did not close; still in gaming mode"
+  fi
+  om_state_set mode '"work"'
+  om_activity idle
+  if (( had_steam )); then
+    om_notify "Work mode" "Work mode: Steam closed."
+  else
+    om_notify "Work mode" "Work mode."
+  fi
+  om_info "Work mode"
+}
+
+# Used by the Steam launcher entry.
+om_cmd_steam() { # [args...]
+  if [[ "$(om_state_get mode)" == gaming ]]; then
+    om_steam_start "$@"
+    return 0
+  fi
+  om_steam_prompt
+  om_info "Steam is available in gaming mode"
+}
+
+# Called by the panel when a Steam window appears. Never closes Steam.
+om_cmd_steam_detected() {
+  local marker
+  marker="$(om_runtime_dir)/steam-prompted"
+  if ! om_steam_running; then
+    rm -f "$marker"
+    return 0
+  fi
+  [[ "$(om_state_get mode)" == work ]] || return 0
+  # One prompt per Steam run: the marker holds the Steam process id.
+  local pid
+  pid="$(om_steam_pid)"
+  [[ -e "$marker" && "$(cat "$marker")" == "$pid" ]] && return 0
+  printf '%s\n' "$pid" >"$marker"
+  om_steam_prompt
 }
