@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+source "$(dirname "$0")/lib.sh"
+t_sandbox
+
+m="$OMAMODE_HOME/models"
+truncate -s 2G "$m/A.gguf"
+truncate -s 1G "$m/mmproj-F16.gguf"
+truncate -s 1G "$m/mtp-A-Q8_0.gguf"
+truncate -s 1G "$m/dflash-A-Q4_0.gguf"
+mkdir -p "$m/big"
+truncate -s 3G "$m/big/big-00001-of-00002.gguf"
+truncate -s 3G "$m/big/big-00002-of-00002.gguf"
+truncate -s 1G "$m/big/mmproj-F16.gguf"
+touch "$m/notes.txt"
+
+# Review Focus 1: helper files are not models; a folder is one model.
+ids="$(omamode models --json | jq -r '.[].id' | tr '\n' ' ')"
+assert_eq "A big " "$ids" "model ids"
+assert_eq "6.4" "$(omamode models --json | jq -r '.[] | select(.id=="big") | .sizeGB')" "big size"
+assert_eq "2.1" "$(omamode models --json | jq -r '.[] | select(.id=="A") | .sizeGB')" "A size"
+
+# Without a server, models are listed from disk and not known to a router.
+assert_eq "false" "$(omamode models --json | jq -r '.[] | select(.id=="A") | .known')" "unknown without router"
+
+t_router_start
+t_router_ctl '{"models":["A"]}'
+assert_eq "true" "$(omamode models --json | jq -r '.[] | select(.id=="A") | .known')" "A known"
+assert_eq "false" "$(omamode models --json | jq -r '.[] | select(.id=="big") | .known')" "big needs restart"
+assert_eq "false" "$(omamode models --json | jq -r '.[] | select(.id=="A") | .loaded')" "A not loaded"
+
+t_router_ctl '{"loaded":"A"}'
+assert_eq "true" "$(omamode models --json | jq -r '.[] | select(.id=="A") | .loaded')" "A loaded"
+assert_eq "2.1" "$(omamode status --json | jq -r .loaded.sizeGB)" "status shows loaded size"
+
+omamode config set default_model '"big"'
+assert_eq "true" "$(omamode models --json | jq -r '.[] | select(.id=="big") | .default')" "default flag"
+assert_eq "false" "$(omamode models --json | jq -r '.[] | select(.id=="A") | .default')" "not default"
+assert_eq "big" "$(omamode status --json | jq -r .default)" "status default"
+
+# Human-readable listing.
+assert_contains "$(omamode models)" "big" "plain listing"
+
+t_done

@@ -70,4 +70,7 @@ om_main() {
   esac
 }
 
-om_main "$@"
+# Tests source this file to reach the lib functions without running a command.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  om_main "$@"
+fi
