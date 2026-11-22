@@ -5,7 +5,7 @@ t_sandbox
 # Work on a copy of the plugin, so "the plugin was removed" can be tested.
 P="$T/plugin"
 mkdir -p "$P"
-cp -r "$REPO/bin" "$REPO/lib" "$REPO/pi" "$REPO/steam" "$REPO/manifest.json" "$P/"
+cp -r "$REPO/bin" "$REPO/lib" "$REPO/pi" "$REPO/manifest.json" "$P/"
 PCLI="$P/bin/omamode"
 
 cp /usr/share/applications/steam.desktop "$T/steam.desktop" 2>/dev/null || cat >"$T/steam.desktop" <<'EOF'
@@ -83,6 +83,29 @@ assert_exit 0 "$PCLI" setup
 assert_contains "$(cat "$T/last.out")" "Skipped" "reports the skip"
 cmp -s "$desk" "$T/mine.desktop"; assert_eq 0 $? "user's launcher untouched"
 rm -f "$desk"; "$PCLI" uninstall >/dev/null; "$PCLI" setup >/dev/null
+
+# A plugin path with a space and an ampersand still works (quoting).
+"$PCLI" uninstall >/dev/null
+Q="$T/my plugins & co/plugin"
+mkdir -p "$(dirname "$Q")"; cp -r "$P" "$Q"
+assert_exit 0 "$Q/bin/omamode" setup
+bash -n "$exe"; assert_eq 0 $? "steam-exec is valid bash"
+: >"$T/steam.log"
+"$exe" steam://store >"$T/exe.out" 2>&1
+sleep 0.3
+assert_file_contains "$T/steam.log" "steam://store" "steam-exec reaches omamode under an odd path"
+assert_not_contains "$(cat "$T/exe.out")" "command not found" "no word splitting"
+assert_eq "$(jq -r .version "$P/manifest.json")" "$("$wrap" --version)" "wrapper works under an odd path"
+"$Q/bin/omamode" uninstall >/dev/null
+rm -rf "$T/my plugins & co"
+
+# A data folder with a space: the launcher's Exec value is quoted per the
+# desktop entry spec.
+XDG_DATA_HOME="$T/data dir" "$PCLI" setup >/dev/null
+assert_file_contains "$T/data dir/applications/steam.desktop" \
+  "Exec=\"$T/data dir/omamode/steam-exec\" %U" "Exec path quoted"
+XDG_DATA_HOME="$T/data dir" "$PCLI" uninstall >/dev/null
+"$PCLI" setup >/dev/null
 
 # Plugin removed without uninstall: Steam and the wrapper still behave.
 rm -rf "$P"

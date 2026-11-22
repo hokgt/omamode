@@ -32,6 +32,22 @@ om_place() { # path mode description
   om_info "Placed $what: $path"
 }
 
+# Quote a path for a desktop entry Exec key: double-quote it when it holds
+# reserved characters, escaping " ` $ and \ (and doubling backslashes for
+# the key-file layer); % becomes %%.
+om_desktop_quote() { # path
+  local p="${1//%/%%}"
+  if [[ "$p" =~ [[:space:]\"\'\\\>\<~\|\&\;\$\*\?\#\(\)\`] ]]; then
+    p="${p//\\/\\\\\\\\}"
+    p="${p//\"/\\\\\"}"
+    p="${p//\`/\\\\\`}"
+    p="${p//\$/\\\\\$}"
+    printf '"%s"\n' "$p"
+  else
+    printf '%s\n' "$p"
+  fi
+}
+
 om_setup_version_file() { printf '%s/setup-version\n' "$(om_config_dir)"; }
 
 om_cmd_setup() { # [--if-needed]
@@ -45,12 +61,23 @@ om_cmd_setup() { # [--if-needed]
   cli="$OM_ROOT/bin/omamode"
   steam_bin="$(om_steam_bin)"
 
-  sed -e "s|@PLUGIN_CLI@|$(printf '%q' "$cli")|" -e "s|@STEAM_BIN@|$(printf '%q' "$steam_bin")|" \
-    "$OM_ROOT/steam/steam-exec.sh.in" | om_place "$OM_P_EXEC" 755 "Steam launcher helper"
+  # Paths are shell-quoted with printf %q; never pass them through sed.
+  cat <<EOS | om_place "$OM_P_EXEC" 755 "Steam launcher helper"
+#!/usr/bin/env bash
+# $OM_MARKER
+# Steam's launcher entry runs this. It sends Steam launches through omamode
+# (which offers gaming mode in work mode), and falls back to Steam itself if
+# omamode has been removed, so Steam always keeps working.
+cli=$(printf '%q' "$cli")
+if [[ -x "\$cli" ]]; then
+  exec "\$cli" steam "\$@"
+fi
+exec $(printf '%q' "$steam_bin") "\$@"
+EOS
 
   src="${OMAMODE_STEAM_DESKTOP:-/usr/share/applications/steam.desktop}"
   if [[ -f "$src" ]]; then
-    awk -v exe="$OM_P_EXEC" -v marker="$OM_DESKTOP_MARKER" '
+    awk -v exe="$(om_desktop_quote "$OM_P_EXEC")" -v marker="$OM_DESKTOP_MARKER" '
       /^Exec=\/usr\/bin\/steam( |$)/ { sub(/^Exec=\/usr\/bin\/steam/, "Exec=" exe) }
       { print }
       /^\[Desktop Entry\]$/ && !done { print marker; done = 1 }
