@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "hokgt.omamode",
+  "name": "omamode",
+  "version": "0.1.0",
+  "author": "hokgt",
+  "license": "MIT",
+  "description": "Work and gaming modes for Omarchy: switch between a local llama.cpp model and Steam from one bar button, so they never compete for unified memory.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "omamode",
+    "description": "Switch between work mode (local AI model) and gaming mode (Steam), and load or unload models.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {}
+  }
+}

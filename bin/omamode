@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# omamode: work and gaming modes for Omarchy.
+# Run `omamode help` for the list of commands.
+set -u
+
+OM_SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+OM_ROOT="$(cd "$(dirname "$OM_SELF")/.." && pwd)"
+export OM_SELF OM_ROOT
+
+# shellcheck source=/dev/null
+source "$OM_ROOT/lib/common.sh"
+# shellcheck source=/dev/null
+source "$OM_ROOT/lib/config.sh"
+for _lib in "$OM_ROOT"/lib/*.sh; do
+  case "$_lib" in */common.sh|*/config.sh) continue ;; esac
+  # shellcheck source=/dev/null
+  source "$_lib"
+done
+unset _lib
+
+om_usage() {
+  cat <<'EOF'
+Usage: omamode <command> [args]
+
+  status [--json]          current mode, loaded model, activity
+  models [--json]          models in the models folder
+  load [model]             load a model (the default if omitted); swaps if another is loaded
+  unload                   unload the loaded model
+  default <model>          set the default model (also pi's default when pi uses llama.cpp)
+  work [--confirmed]       switch to work mode (closes Steam; loads nothing)
+  gaming                   switch to gaming mode (unloads the model, opens Steam)
+  steam [args...]          start Steam in gaming mode; otherwise offer to switch
+  setup [--if-needed]      place the Steam launcher entry, CLI wrapper and pi extension
+  uninstall                remove everything setup placed
+  config get <key>         print a config value
+  config set <key> <json>  set a config value
+  --version                print the version
+
+Exit codes: 0 ok, 1 failed, 2 usage error, 3 refused.
+EOF
+}
+
+om_cmd_config() {
+  case "${1:-}" in
+    get) [[ $# -eq 2 ]] || om_die 2 "usage: omamode config get <key>"; om_config_get "$2" ;;
+    set) [[ $# -eq 3 ]] || om_die 2 "usage: omamode config set <key> <json>"; om_config_set "$2" "$3" ;;
+    *) om_die 2 "usage: omamode config get|set <key> [json]" ;;
+  esac
+}
+
+om_main() {
+  local cmd="${1:-help}"
+  [[ $# -gt 0 ]] && shift
+  case "$cmd" in
+    --version|version) jq -r .version "$OM_ROOT/manifest.json" ;;
+    help|-h|--help) om_usage ;;
+    config) om_cmd_config "$@" ;;
+    __job)
+      local fn="${1:-}"; shift || true
+      [[ "$fn" == om_job_* ]] && declare -F "$fn" >/dev/null || om_die 2 "unknown job: $fn"
+      om_with_lock "$fn" "$@" ;;
+    *)
+      local fn="om_cmd_${cmd//-/_}"
+      if [[ "$cmd" =~ ^[a-z][a-z-]*$ ]] && declare -F "$fn" >/dev/null; then
+        "$fn" "$@"
+      else
+        om_usage >&2
+        om_die 2 "unknown command: $cmd"
+      fi ;;
+  esac
+}
+
+om_main "$@"
