@@ -180,8 +180,16 @@ Panel {
           enabled: (root.service.models || []).length > 0
           fontFamily: root.fontFamily
           options: (root.service.models || []).map(function(m) { return { value: m.id, label: root.modelLabel(m) } })
-          value: root.selectedModel
           onChanged: function(v) { root.selectedModel = v }
+        }
+
+        // Dropdown assigns its own value when the user picks an entry, which
+        // would break a plain binding; this Binding keeps following
+        // selectedModel (e.g. back to the default when the panel reopens).
+        Binding {
+          target: modelDropdown
+          property: "value"
+          value: root.selectedModel
         }
 
         Text {
@@ -237,7 +245,7 @@ Panel {
           width: parent.width
           textFormat: Text.PlainText
           text: message
-          color: Commons.Color.error !== undefined ? Commons.Color.error : root.fg
+          color: Commons.Color.urgent
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           wrapMode: Text.Wrap
