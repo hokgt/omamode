@@ -48,6 +48,19 @@ assert_contains "$(omamode models)" "(downloading)" "plain listing marks it"
 assert_exit 3 omamode load dl
 assert_contains "$(cat "$T/last.err")" "still downloading" "load refuses incomplete model"
 
+# Split files at the top level: llama-server lists every shard as its own
+# model (checked against a real router). omamode lists the model once, under
+# the first shard's id (the one that loads), with the combined size.
+truncate -s 2000000000 "$m/top-00001-of-00002.gguf"
+truncate -s 2000000000 "$m/top-00002-of-00002.gguf"
+t_router_ctl '{"models":["A","top-00001-of-00002","top-00002-of-00002"],"loaded":null}'
+ids="$(omamode models --json | jq -r '[.[].id | select(startswith("top"))] | join(" ")')"
+assert_eq "top-00001-of-00002" "$ids" "top-level split listed once, by its first shard"
+assert_eq "4" "$(omamode models --json | jq -r '.[] | select(.id=="top-00001-of-00002") | .sizeGB')" "combined size"
+assert_eq "true" "$(omamode models --json | jq -r '.[] | select(.id=="top-00001-of-00002") | .known')" "matches the router's id"
+rm -f "$m"/top-0000*.gguf
+t_router_ctl '{"models":["A"]}'
+
 # Many models: the list asks the server a fixed number of times, not once
 # per model.
 for i in $(seq 1 20); do truncate -s 1000000 "$m/many-$i.gguf"; done

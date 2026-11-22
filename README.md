@@ -136,7 +136,7 @@ Runtime state lives in `$XDG_RUNTIME_DIR/omamode/`, which is cleared on reboot. 
 
 ### Model folder layout
 
-Single-file models sit directly in `models_dir`. Split and multimodal models go in a subfolder, which is listed as one model under the folder's name. `mmproj-*`, `mtp-*` and `dflash-*` helper files are never listed as models.
+Single-file models sit directly in `models_dir`. Split and multimodal models go in a subfolder, which is listed as one model under the folder's name. `mmproj-*`, `mtp-*` and `dflash-*` helper files are never listed as models. Split files left at the top level are listed once, under the first file's name (`model-00001-of-00003`), because that's the name llama-server loads them by.
 
 ```
 ~/models/

@@ -27,7 +27,9 @@ om_disk_models() {
     base="$(basename "$f")"
     om_is_helper_gguf "$base" && continue
     id="${base%%.gguf*}"
-    id="$(sed -E 's/-[0-9]{5}-of-[0-9]{5}$//' <<<"$id")"
+    # Top-level split files: llama-server lists each shard as a model and
+    # loads the whole set from the first; use the first shard's id.
+    id="$(sed -E 's/-[0-9]{5}-of-([0-9]{5})$/-00001-of-\1/' <<<"$id")"
     if [[ "$base" != *.gguf ]]; then
       partial[$id]=1
       sizes[$id]=$(( ${sizes[$id]:-0} + 0 ))
@@ -109,7 +111,8 @@ om_models_json() {
   jq -n -c --argjson disk "$disk" --argjson router "$router" --arg default "$default" \
     --arg limit "${limit:-}" --arg used "${used:-0}" --argjson allowance "${allowance:-4}" '
     ($router | map({(.id): .status}) | add // {}) as $st
-    | ([$disk[].id] + [$router[].id] | unique) as $ids
+    | ([$disk[].id] + [$router[].id] | unique
+       | map(select((test("-[0-9]{5}-of-[0-9]{5}$") and (test("-00001-of-[0-9]{5}$") | not)) | not))) as $ids
     | ($disk | map({(.id): .bytes}) | add // {}) as $bytes
     | ($disk | map({(.id): .complete}) | add // {}) as $complete
     | ([$router[] | select(.status == "loaded" or .status == "loading") | .id][0]) as $loaded
