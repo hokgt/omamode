@@ -71,7 +71,7 @@ om_spawn() { # log-file command args...
 # Run a job function (om_job_*) under the lock, detached from the caller so
 # it keeps going when the panel or terminal closes. The caller takes the
 # lock first, so a second operation is refused right away, and the job
-# inherits it. Inline when OMAMODE_FOREGROUND=1 (tests).
+# inherits it. Inline when OMAMODE_FOREGROUND=1 (used by the tests).
 om_run_job() { # name function args...
   local name="$1"; shift
   om_take_lock
