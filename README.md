@@ -195,6 +195,19 @@ omarchy plugin remove hokgt.omamode
 
 `omamode uninstall` removes exactly the files setup placed (only those with the omamode marker). If you remove the plugin without running it first, nothing breaks: the leftover Steam entry starts Steam directly, the pi extension does nothing, and the `omamode` command tells you how to clean up.
 
+## Versioning and releases
+
+omamode follows [semantic versioning](https://semver.org), and releases are automatic. Every push to `main` runs the tests in GitHub Actions. When they pass and the new commits include a releasable [Conventional Commit](https://www.conventionalcommits.org), the workflow bumps `manifest.json`, tags `vX.Y.Z` and publishes a GitHub release:
+
+| Commit | Release |
+|---|---|
+| `fix: …`, `perf: …` | patch (0.1.0 → 0.1.1) |
+| `feat: …` | minor (0.1.1 → 0.2.0) |
+| `feat!: …` or a `BREAKING CHANGE:` footer | major (0.2.0 → 1.0.0) |
+| `docs:`, `test:`, `ci:`, `chore:`, `refactor:` | no release |
+
+Update an installed copy with `omarchy plugin update hokgt.omamode`. When the version changes, omamode re-runs its setup on the next shell start, so the Steam launcher entry and pi extension stay current.
+
 ## License
 
 [MIT](LICENSE)

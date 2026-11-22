@@ -1,0 +1,71 @@
+name: Test and release
+
+# Every push and pull request runs the tests. On main, a passing push with a
+# releasable Conventional Commit (feat, fix, perf, or a breaking change)
+# bumps manifest.json by semantic versioning, tags vX.Y.Z and publishes a
+# GitHub release. The version matters at runtime: an installed omamode re-runs
+# its setup when the manifest version changes.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q jq curl util-linux procps
+      - name: Run tests
+        run: bash tests/run.sh
+
+  release:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Work out the next version
+        id: version
+        run: |
+          next="$(.github/scripts/next-version.sh)"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          if [ -z "$next" ]; then echo "No releasable commits since the last tag."; fi
+      - name: Bump manifest, tag and push
+        if: steps.version.outputs.next != ''
+        env:
+          NEXT: ${{ steps.version.outputs.next }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          current="$(jq -r .version manifest.json)"
+          if [ "$current" != "$NEXT" ]; then
+            jq --arg v "$NEXT" '.version = $v' manifest.json > manifest.json.tmp
+            mv manifest.json.tmp manifest.json
+            git add manifest.json
+            git commit -m "chore(release): v$NEXT [skip ci]"
+            git push origin HEAD:main
+          fi
+          git tag "v$NEXT"
+          git push origin "v$NEXT"
+      - name: Publish the GitHub release
+        if: steps.version.outputs.next != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT: ${{ steps.version.outputs.next }}
+        run: gh release create "v$NEXT" --title "v$NEXT" --generate-notes --verify-tag
