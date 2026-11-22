@@ -1,0 +1,21 @@
+{
+  "mode.work": "Work",
+  "mode.gaming": "Gaming",
+  "title.work": "Work mode",
+  "title.gaming": "Gaming mode",
+  "status.noModel": "No model loaded",
+  "status.loaded": "%1 · %2 GB",
+  "status.gamingHint": "Model unloaded for gaming",
+  "status.serverStopped": "llama-server is not running",
+  "model.label": "Model",
+  "model.none": "No models found",
+  "model.tooBig": "%1 (too big)",
+  "model.downloading": "%1 (downloading)",
+  "model.default": "%1 (default)",
+  "action.setDefault": "Set as default",
+  "action.load": "Load",
+  "action.unload": "Unload",
+  "tooltip.work": "Work mode",
+  "tooltip.workLoaded": "Work mode · %1",
+  "tooltip.gaming": "Gaming mode"
+}
