@@ -104,6 +104,19 @@ assert_eq "" "$(cat "$T/steam.log")" "Steam not started in work mode"
 assert_file_contains "$T/notify.log" "Steam is available in gaming mode" "work-mode prompt"
 assert_file_contains "$T/notify.log" "Switch to gaming mode" "switch button"
 
+# Switching to gaming after that prompt opens the link the user clicked,
+# once.
+assert_exit 0 omamode gaming
+for _ in $(seq 30); do grep -q "steam://open/games" "$T/steam.log" && break; sleep 0.1; done
+assert_file_contains "$T/steam.log" "steam://open/games" "pending steam:// link opened after switching"
+rm -f "$T/steam.pid"
+assert_exit 0 omamode work
+: >"$T/steam.log"
+assert_exit 0 omamode gaming
+sleep 0.3
+assert_not_contains "$(cat "$T/steam.log")" "steam://" "link opened only once"
+rm -f "$T/steam.pid"; assert_exit 0 omamode work
+
 # Steam opened some other way in work mode: one prompt per Steam run.
 echo $$ >"$T/steam.pid"
 : >"$T/notify.log"

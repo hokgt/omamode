@@ -207,9 +207,15 @@ om_job_gaming() {
     om_server_unload "$loaded"
   fi
   om_state_set mode '"gaming"'
-  if ! om_steam_running; then
+  local -a pending=()
+  if [[ -s "$(om_pending_steam_file)" ]]; then
+    mapfile -d '' -t pending <"$(om_pending_steam_file)"
+  fi
+  rm -f "$(om_pending_steam_file)"
+  if ! om_steam_running || (( ${#pending[@]} )); then
+    # A running Steam hands a steam:// link to the open client.
     om_activity starting-steam "Opening Steam…"
-    om_steam_start
+    om_steam_start "${pending[@]}"
   fi
   om_activity idle
   om_notify "Gaming mode" "Gaming mode: model unloaded, opening Steam."
@@ -256,9 +262,16 @@ om_cmd_steam() { # [args...]
     om_steam_start "$@"
     return 0
   fi
+  # Remember what was asked for (e.g. a steam:// link), so switching to
+  # gaming mode opens it.
+  if (( $# )); then
+    printf '%s\0' "$@" >"$(om_pending_steam_file)"
+  fi
   om_steam_prompt
   om_info "Steam is available in gaming mode"
 }
+
+om_pending_steam_file() { printf '%s/pending-steam-args\n' "$(om_runtime_dir)"; }
 
 # Called by the panel when a Steam window appears. Never closes Steam.
 om_cmd_steam_detected() {
