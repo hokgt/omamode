@@ -79,3 +79,99 @@ test("waitForLoad: never started stops at the deadline", async () => {
   const r = await waitForLoad(seq([status()]), "A", fast);
   assert.equal(r.kind, "timeout");
 });
+
+import { syncLoadedModel } from "../pi/omamode.ts";
+
+const fakePi = () => {
+  const calls: any = { setModel: [] as unknown[] };
+  return { calls, api: { setModel: async (m: unknown) => { calls.setModel.push(m); return true; } } };
+};
+const fakeCtx = (opts: { current?: string; known?: string[]; refreshFails?: boolean; noRegistry?: boolean } = {}) => {
+  const log: any = { refresh: [] as unknown[] };
+  const known = new Set(opts.known ?? []);
+  const ctx: any = {
+    model: opts.current ? { provider: "llama.cpp", id: opts.current } : undefined,
+    modelRegistry: opts.noRegistry ? undefined : {
+      refresh: async (o: any) => {
+        log.refresh.push(o);
+        if (opts.refreshFails) throw new Error("server down");
+        known.add("Flash");
+      },
+      find: (provider: string, id: string) => (provider === "llama.cpp" && known.has(id) ? { provider, id } : undefined),
+    },
+  };
+  return { ctx, log };
+};
+
+test("syncLoadedModel: refreshes pi's llama.cpp list, then selects the model", async () => {
+  const p = fakePi(); const c = fakeCtx();
+  assert.equal(await syncLoadedModel(p.api as any, c.ctx, "Flash"), true);
+  assert.equal(c.log.refresh.length, 1);
+  assert.deepEqual(c.log.refresh[0].providers, ["llama.cpp"]);
+  assert.equal(c.log.refresh[0].allowNetwork, true);
+  assert.ok(c.log.refresh[0].signal instanceof AbortSignal);
+  assert.deepEqual(p.calls.setModel, [{ provider: "llama.cpp", id: "Flash" }]);
+});
+
+test("syncLoadedModel: already on that model, nothing to select", async () => {
+  const p = fakePi(); const c = fakeCtx({ current: "Flash" });
+  await syncLoadedModel(p.api as any, c.ctx, "Flash");
+  assert.deepEqual(p.calls.setModel, []);
+});
+
+test("syncLoadedModel: a failing refresh never throws", async () => {
+  const p = fakePi(); const c = fakeCtx({ refreshFails: true });
+  assert.equal(await syncLoadedModel(p.api as any, c.ctx, "Flash"), false);
+  assert.deepEqual(p.calls.setModel, []);
+});
+
+test("syncLoadedModel: no model registry, no error", async () => {
+  const p = fakePi(); const c = fakeCtx({ noRegistry: true });
+  assert.equal(await syncLoadedModel(p.api as any, c.ctx, "Flash"), false);
+});
+
+import { targetModel } from "../pi/omamode.ts";
+
+const def = { provider: "llama.cpp", model: "Flash" };
+const none = () => undefined;
+const has = (id: string) => (p: string, m: string) => (p === "llama.cpp" && m === id ? { id } : undefined);
+
+test("targetModel: pi is on its local default: use it", () => {
+  assert.deepEqual(targetModel({ provider: "llama.cpp", id: "Flash" }, def, none, true), def);
+});
+
+test("targetModel: pi fell back to another local model because its default is missing", () => {
+  assert.deepEqual(targetModel({ provider: "llama.cpp", id: "Qwen" }, def, none, true), def);
+});
+
+test("targetModel: pi fell back because its local default is missing from its list (seen live)", () => {
+  assert.deepEqual(targetModel({ provider: "kimi-coding", id: "kimi-for-coding" }, def, none, true), def);
+});
+
+test("targetModel: pi knows its default but is on another model on purpose", () => {
+  assert.deepEqual(targetModel({ provider: "kimi-coding", id: "k3" }, def, has("Flash"), true), { provider: "kimi-coding", model: "k3" });
+});
+
+test("targetModel: later runs follow pi's current model", () => {
+  assert.deepEqual(targetModel({ provider: "kimi-coding", id: "k3" }, def, none, false), { provider: "kimi-coding", model: "k3" });
+});
+
+test("targetModel: no model yet: pi's configured default", () => {
+  assert.deepEqual(targetModel(undefined, def, none, false), def);
+});
+
+import { sameServer } from "../pi/omamode.ts";
+
+test("sameServer: same host and port", () => {
+  assert.equal(sameServer("http://127.0.0.1:8090", "http://127.0.0.1:8090/"), true);
+  assert.equal(sameServer("http://localhost:8090/v1", "http://127.0.0.1:8090"), true);
+});
+
+test("sameServer: a different port is a mismatch (seen live: 8080 vs 8090)", () => {
+  assert.equal(sameServer("http://127.0.0.1:8080", "http://127.0.0.1:8090"), false);
+});
+
+test("sameServer: unknown addresses never warn", () => {
+  assert.equal(sameServer(undefined, "http://127.0.0.1:8090"), true);
+  assert.equal(sameServer("not a url", "http://127.0.0.1:8090"), true);
+});

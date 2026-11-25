@@ -84,6 +84,76 @@ export async function waitForLoad(
   return { kind: "timeout" };
 }
 
+// Which model pi means to use. Normally pi's current model. At startup, if
+// pi's configured default is a local model pi could not find in its cached
+// list, pi silently falls back to another model; in that case the configured
+// default is what the user wants. A default pi does know but is not using was
+// changed on purpose (e.g. --model), so it is left alone.
+export function targetModel(
+  current: { provider?: string; id?: string } | undefined,
+  configured: { provider?: string; model?: string },
+  find: (provider: string, id: string) => unknown,
+  atStart: boolean,
+): { provider?: string; model?: string } {
+  if (!current?.provider) return { provider: configured.provider, model: configured.model };
+  const fellBack = atStart
+    && configured.provider === LOCAL_PROVIDER
+    && !!configured.model
+    && !(current.provider === configured.provider && current.id === configured.model)
+    && !find(LOCAL_PROVIDER, configured.model);
+  return fellBack ? { provider: configured.provider, model: configured.model } : { provider: current.provider, model: current.id };
+}
+
+// True when two server addresses point at the same host and port (or when
+// either is unknown, so a guess never produces a warning).
+export function sameServer(a: string | undefined, b: string | undefined): boolean {
+  const key = (u: string | undefined) => {
+    if (!u) return null;
+    try {
+      const x = new URL(u);
+      const host = x.hostname === "localhost" ? "127.0.0.1" : x.hostname;
+      const port = x.port || (x.protocol === "https:" ? "443" : "80");
+      return `${host}:${port}`;
+    } catch {
+      return null;
+    }
+  };
+  const ka = key(a), kb = key(b);
+  return ka === null || kb === null || ka === kb;
+}
+
+// The server address saved in pi's llama.cpp login (only that field is read;
+// never the key). pi uses it before anything else.
+function piLlamaUrl(): string | undefined {
+  try {
+    const auth = JSON.parse(readFileSync(join(homedir(), ".pi", "agent", "auth.json"), "utf8"));
+    const url = auth?.[LOCAL_PROVIDER]?.env?.LLAMA_BASE_URL;
+    return typeof url === "string" ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// pi's llama.cpp provider reads its model list from a cache and refreshes it
+// only inside /llama, so a model loaded by omamode stays invisible to pi.
+// Refresh the list (it shows models the router has loaded), then select the
+// model. Returns true when the model was found. Never throws.
+export async function syncLoadedModel(pi: { setModel: (m: any) => Promise<boolean> }, ctx: any, model: string): Promise<boolean> {
+  const registry = ctx?.modelRegistry;
+  if (!registry?.refresh) return false;
+  try {
+    await registry.refresh({ providers: [LOCAL_PROVIDER], allowNetwork: true, signal: AbortSignal.timeout(15000) });
+  } catch {
+    return false;
+  }
+  const m = registry.find?.(LOCAL_PROVIDER, model);
+  if (!m) return false;
+  if (ctx.model?.provider !== LOCAL_PROVIDER || ctx.model?.id !== model) {
+    try { await pi.setModel(m); } catch { /* keep pi usable */ }
+  }
+  return true;
+}
+
 function findOmamode(): string | null {
   const wrapper = join(homedir(), ".local", "bin", "omamode");
   if (existsSync(wrapper)) return wrapper;
@@ -109,6 +179,18 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export default function (pi: ExtensionAPI) {
   let checking = false;
   let noticed = false;
+  let warnedServer = false;
+
+  function warnServerMismatch(ctx: any, st: Status | null): void {
+    const serverUrl = typeof st?.serverUrl === "string" ? st.serverUrl : undefined;
+    const piUrl = piLlamaUrl();
+    if (warnedServer || sameServer(piUrl, serverUrl)) return;
+    warnedServer = true;
+    const msg = `omamode: pi's llama.cpp login points at ${piUrl}, but llama-server runs at ${serverUrl}. `
+      + `In pi, run /login llama.cpp and enter ${serverUrl}.`;
+    if (ctx.hasUI) ctx.ui.notify(msg, "warning");
+    else console.error(msg);
+  }
 
   async function status(cli: string): Promise<Status | null> {
     const r = await pi.exec(cli, ["status", "--json"], { timeout: 5000 });
@@ -120,17 +202,28 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  async function check(ctx: any): Promise<void> {
+  async function check(ctx: any, atStart: boolean): Promise<void> {
     if (checking) return;
     checking = true;
     try {
       const cli = findOmamode();
       if (!cli) return;
-      const fallback = piDefault();
-      const provider = ctx.model?.provider ?? fallback.provider;
-      const modelId = ctx.model?.provider ? ctx.model?.id : fallback.model;
+      const target = targetModel(ctx.model, piDefault(),
+        (prov, id) => ctx.modelRegistry?.find?.(prov, id), atStart);
+      const provider = target.provider;
+      const modelId = target.model;
       const st = await status(cli);
       const d = decide(st, provider, modelId);
+      if (provider === LOCAL_PROVIDER && st) warnServerMismatch(ctx, st);
+      // pi's model is loaded: make sure pi's list has it (at startup, or when
+      // pi could not select it yet).
+      if (d.kind === "ok") {
+        const loadedId = st?.loaded?.id;
+        if (loadedId && (atStart || ctx.model?.provider !== LOCAL_PROVIDER || ctx.model?.id !== loadedId)) {
+          await syncLoadedModel(pi, ctx, loadedId);
+        }
+        return;
+      }
       if (d.kind !== "prompt") return;
 
       if (!ctx.hasUI) {
@@ -171,9 +264,10 @@ export default function (pi: ExtensionAPI) {
         onDetail: (detail) => ctx.ui.setStatus("omamode", detail),
       });
       if (res.kind === "loaded") {
-        const m = ctx.modelRegistry?.find?.(LOCAL_PROVIDER, d.model);
-        if (m && ctx.model?.id !== d.model) await pi.setModel(m);
-        ctx.ui.notify(`omamode: ${d.model} is loaded`, "info");
+        const found = await syncLoadedModel(pi, ctx, d.model);
+        ctx.ui.notify(found
+          ? `omamode: ${d.model} is loaded`
+          : `omamode: ${d.model} is loaded; select it with /model if pi has not switched`, "info");
       } else if (res.kind === "error") {
         ctx.ui.notify(`omamode: ${res.message}`, "error");
       } else {
@@ -187,6 +281,6 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  pi.on("session_start", async (_event, ctx) => { await check(ctx); });
-  pi.on("before_agent_start", async (_event, ctx) => { await check(ctx); });
+  pi.on("session_start", async (_event, ctx) => { await check(ctx, true); });
+  pi.on("before_agent_start", async (_event, ctx) => { await check(ctx, false); });
 }

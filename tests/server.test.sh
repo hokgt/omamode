@@ -15,6 +15,7 @@ t_router_ctl '{"models":["A","B"],"loaded":"A"}'
 out="$(omamode status --json)"
 assert_eq "running" "$(jq -r .server <<<"$out")" "server running"
 assert_eq "A" "$(jq -r .loaded.id <<<"$out")" "A loaded"
+assert_eq "$OMAMODE_SERVER_URL" "$(jq -r .serverUrl <<<"$out")" "status reports the server address"
 
 # Busy check.
 source "$OMAMODE"

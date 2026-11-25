@@ -27,6 +27,7 @@ om_status_json() {
   fi
   jq -n -c \
     --argjson mdir "$mdir" \
+    --arg serverUrl "$(om_server_url)" \
     --argjson state "$state" \
     --argjson gpu "$(om_gpu_json)" \
     --arg server "$server" \
@@ -40,6 +41,7 @@ om_status_json() {
       detail: $state.detail,
       error: ($state.error // $err),
       server: $server,
+      serverUrl: $serverUrl,
       loaded: $loaded,
       default: (if $default == "null" then null else $default end),
       gpu: $gpu,
