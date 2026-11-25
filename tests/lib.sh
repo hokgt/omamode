@@ -17,6 +17,7 @@ t_sandbox() {
   export OMAMODE_HOME="$T/home"
   export OMAMODE_RUNTIME_DIR="$T/run"
   export OMAMODE_PI_DIR="$T/home/.pi/agent"
+  export OMAMODE_AGENT_PATH="$T/agent-bin"   # no real agents are found
   export OMAMODE_DRM_DIR="$T/drm"
   export OMAMODE_FOREGROUND=1
   export OMAMODE_POLL=0.1

@@ -66,6 +66,7 @@ ShellRoot {
         console.log("dropdownOpen=" + dd.value)
         dd.value = "A"; dd.changed("A")
         console.log("dropdownPicked=" + dd.value + "/" + panel.selectedModel)
+        console.log("pickedRan=" + svc.lastArgs.join(" "))
         panel.close()
         break
       case 2: panel.open(); break
@@ -82,6 +83,19 @@ ShellRoot {
         break
       case 5:
         console.log("ranFolder=" + svc.lastArgs.join(" "))
+        var ad = panel.agentDropdown
+        console.log("agentShown=" + (ad ? ad.value : "missing"))
+        console.log("agentOptions=" + panel.agentOptions.map(function(o) { return o.value }).join(","))
+        if (ad) { ad.value = "opencode"; ad.changed("opencode") }
+        break
+      case 6:
+        console.log("agentRan=" + svc.lastArgs.join(" "))
+        // A is the loaded model; once it is also the default, picking it
+        // again must not run anything.
+        svc.models = [{ id: "A", sizeGB: 22.1, default: true, loaded: true, fits: true, known: true, complete: true }]
+        svc.lastArgs = []
+        dd.value = "A"; dd.changed("A")
+        console.log("repickLoadedDefault=" + (svc.lastArgs.length ? svc.lastArgs.join(" ") : "none"))
         stop(); Qt.quit()
         break
       }

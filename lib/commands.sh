@@ -28,6 +28,8 @@ om_status_json() {
   jq -n -c \
     --argjson mdir "$mdir" \
     --arg serverUrl "$(om_server_url)" \
+    --arg agent "$(om_agent)" \
+    --argjson agents "$(om_agents_json)" \
     --argjson state "$state" \
     --argjson gpu "$(om_gpu_json)" \
     --arg server "$server" \
@@ -42,6 +44,8 @@ om_status_json() {
       error: ($state.error // $err),
       server: $server,
       serverUrl: $serverUrl,
+      agent: $agent,
+      agents: $agents,
       loaded: $loaded,
       default: (if $default == "null" then null else $default end),
       gpu: $gpu,
@@ -61,6 +65,7 @@ om_cmd_status() {
     "Mode:    \(.mode)",
     "Model:   \(if .loaded then "\(.loaded.id) (\(.loaded.sizeGB // "?") GB)" else "none loaded" end)",
     "Default: \(.default // "not set")",
+    "Agent:   \(.agent)",
     "Server:  \(.server)",
     "Folder:  \(.modelsDir.path) (\(.modelsDir.source))\(if .modelsDir.mismatch then " — differs from the configured folder \(.modelsDir.config)" else "" end)",
     (if .activity != "idle" then "Doing:   \(.detail)" else empty end),
@@ -94,14 +99,14 @@ om_wait_idle() { # model-id
   om_server_busy "$id" || return 0
   timeout="$(om_config_get wait_timeout)"
   rm -f "$(om_decision_file)"
-  om_activity waiting "Waiting for pi to finish…"
+  om_activity waiting "Waiting for $(om_agent) to finish…"
   start="$(date +%s)"
   while om_server_busy "$id"; do
     if (( $(date +%s) - start >= timeout )); then
       if (( $(date +%s) - asked_at >= timeout )); then
         asked_at="$(date +%s)"
         om_notify "The local model is still answering" \
-          "pi has been busy for $timeout s. Stop it now, or keep waiting?" \
+          "$(om_agent) has been busy for $timeout s. Stop it now, or keep waiting?" \
           --action "Keep waiting" "$OM_SELF" decide wait \
           --action "Stop the model now" "$OM_SELF" decide stop \
           --action "Cancel" "$OM_SELF" decide cancel
@@ -306,7 +311,50 @@ om_cmd_default() { # id
   om_model_exists "$id" || om_die 2 "Unknown model: $id"
   om_config_set default_model "$(jq -cn --arg m "$id" '$m')"
   om_info "Default model: $id"
-  om_pi_set_default "$id"
+  om_agent_set_default "$id"
+}
+
+# Pick a model: make it the default (for omamode and the agent) and load it.
+# In gaming mode it only becomes the default; it loads in work mode.
+om_cmd_use() { # id
+  local id="${1:-}" loaded="" freed=0 msg
+  [[ -n "$id" ]] || om_die 2 "usage: omamode use <model>"
+  om_model_exists "$id" || om_die 2 "Unknown model: $id"
+  om_model_complete "$id" || om_die 3 "$id is still downloading (files are incomplete)"
+  if [[ "$(om_state_get mode)" != gaming ]]; then
+    # Refuse before changing the default if it cannot load.
+    [[ "$(om_server_state)" == running ]] && loaded="$(om_server_loaded)"
+    if [[ "$loaded" != "$id" ]]; then
+      [[ -n "$loaded" ]] && freed="$(om_model_bytes "$loaded")"
+      msg="$(om_fit_check "$id" "${freed:-0}")" || om_die 3 "$msg"
+    fi
+  fi
+  om_cmd_default "$id"
+  if [[ "$(om_state_get mode)" == gaming ]]; then
+    om_info "Gaming mode: $id loads when you switch to work mode and press Load"
+    return 0
+  fi
+  om_cmd_load "$id"
+}
+
+# Show or pick the agent that uses the local model.
+#   omamode agent            the selected agent
+#   omamode agent --json     every supported agent, installed or not
+#   omamode agent <name>     use this agent (its default follows omamode's)
+om_cmd_agent() {
+  case "${1:-}" in
+    "") om_agent ;;
+    --json) om_agents_json ;;
+    *)
+      local id="$1" default
+      om_agent_supported "$id" || om_die 2 "Unsupported agent: $id (supported: $(om_agent_ids | paste -sd, -))"
+      om_agent_installed "$id" || om_die 3 "$id is not installed"
+      om_config_set agent "$(jq -cn --arg a "$id" '$a')"
+      om_info "Agent: $id"
+      default="$(om_config_get default_model)"
+      [[ -n "$default" && "$default" != null ]] && om_agent_set_default "$default"
+      return 0 ;;
+  esac
 }
 
 # Show or set the models folder.

@@ -22,7 +22,7 @@ cat >"$T/bin/omamode" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$T/cli.log"
 case "$1 ${2:-}" in
-  "status --json") echo '{"mode":"work","activity":"idle","detail":"","error":null,"server":"running","loaded":{"id":"A","sizeGB":22.1},"default":"B","gpu":{"limitGB":65.2,"usedGB":24},"steam":false,"modelsDir":{"path":"/srv/models","source":"server","config":"/home/me/models","server":"/srv/models","mismatch":true,"exists":true}}' ;;
+  "status --json") echo '{"mode":"work","activity":"idle","detail":"","error":null,"server":"running","loaded":{"id":"A","sizeGB":22.1},"default":"B","gpu":{"limitGB":65.2,"usedGB":24},"steam":false,"agent":"pi","agents":[{"id":"pi","installed":true,"selected":true},{"id":"opencode","installed":true,"selected":false}],"modelsDir":{"path":"/srv/models","source":"server","config":"/home/me/models","server":"/srv/models","mismatch":true,"exists":true}}' ;;
   "models --json") echo '[{"id":"A","sizeGB":22.1,"default":false,"loaded":true,"fits":true,"known":true,"complete":true},{"id":"B","sizeGB":20,"default":true,"loaded":false,"fits":true,"known":true,"complete":true}]' ;;
   "load B") echo "omamode: Another omamode operation is running" >&2; exit 3 ;;
   *) echo ok ;;
@@ -53,6 +53,11 @@ assert_contains "$out" "dropdownOpen=B" "dropdown opens on the default"
 assert_contains "$out" "dropdownPicked=A/A" "a pick updates the selection"
 assert_contains "$out" "dropdownReopen=B" "reopening goes back to the default"
 assert_contains "$out" "dropdownAfterRemoval=B" "a removed pick falls back to the default"
+assert_contains "$out" "pickedRan=use A" "picking a model loads it and makes it the default"
+assert_contains "$out" "agentShown=pi" "agent dropdown shows the agent"
+assert_contains "$out" "agentOptions=pi,opencode" "installed agents offered"
+assert_contains "$out" "agentRan=agent opencode" "picking an agent runs the CLI"
+assert_contains "$out" "repickLoadedDefault=none" "picking the loaded default does nothing"
 (( T_FAILS )) && sed -n 1,40p "$T/qs.log" >&2
 [[ -n "${QML_TEST_SHOW:-}" ]] && cat "$T/qs.log"
 

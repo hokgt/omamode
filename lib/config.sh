@@ -8,6 +8,7 @@ om_config_defaults() {
   home="$(om_home)"
   jq -n --arg home "$home" '{
     default_model: null,
+    agent: "pi",
     models_dir: ($home + "/models"),
     port: 8080,
     server_bin: ($home + "/strix-halo/vulkan/bin/llama-server"),

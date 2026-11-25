@@ -25,8 +25,10 @@ Usage: omamode <command> [args]
   status [--json]          current mode, loaded model, activity
   models [--json]          models in the models folder
   load [model]             load a model (the default if omitted); swaps if another is loaded
+  use <model>              make a model the default (also the agent's) and load it
   unload                   unload the loaded model
-  default <model>          set the default model (also pi's default when pi uses llama.cpp)
+  default <model>          set the default model (also the agent's default)
+  agent [name|--json]      show or pick the agent that uses the local model (pi, opencode)
   models-dir [path]        show the models folder, or set it (--use-server adopts the server's)
   work [--confirmed]       switch to work mode (closes Steam; loads nothing)
   gaming                   switch to gaming mode (unloads the model, opens Steam)

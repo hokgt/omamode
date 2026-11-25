@@ -11,14 +11,16 @@ On machines with unified memory (such as AMD Strix Halo), the GPU and the CPU sh
 
 - **One bar button** shows the mode (󰧑 work, 󰊴 gaming). Click it to open a panel with:
   - a **Work / Gaming** toggle,
-  - a **model dropdown** listing every model in your models folder, always opening on your default,
-  - **Set as default**, **Load** and **Unload** buttons,
+  - an **agent dropdown** to pick the coding agent that uses the local model (pi or opencode),
+  - a **model dropdown** listing every model in your models folder, always opening on your default. Picking a model loads it and makes it the default, for omamode and for the agent,
+  - **Load** and **Unload** buttons,
   - a status line: the loaded model and its size, what omamode is doing, or the last error.
 - **Switching to gaming mode** waits until the model finishes any answer in progress, unloads it, and opens Steam.
 - **Switching to work mode** closes Steam. It asks first if a game is open, and never force-closes Steam. It doesn't load a model: you press **Load** when you need it.
 - **Loading a different model swaps them.** Only one model is ever loaded.
 - **Opening Steam in work mode** (from the app launcher or a `steam://` link) shows a notification with a **Switch to gaming mode** button instead of opening Steam.
-- **pi checks before it talks to the local model.** If the model pi uses isn't loaded, pi offers to load it, swap to it, or switch to work mode and load it.
+- **The agent follows the default.** omamode writes the default model into the chosen agent's settings: pi's `defaultModel`, or a `llama.cpp` provider and `model` in opencode's `opencode.json`.
+- **pi checks before it talks to the local model.** If the model pi uses isn't loaded, pi offers to load it, swap to it, or switch to work mode and load it. After a load, pi refreshes its llama.cpp model list, so it sees models omamode loaded.
 - **Models that don't fit are refused up front,** with a clear message such as `Qwen3.8-Flash-Next-UD-IQ4_XS needs ~98 GB; the GPU limit is 65 GB`.
 - **Models that are still downloading** are shown as such and can't be loaded.
 - **After a reboot** you're always in work mode with no model loaded. Steam never opens on its own.
@@ -62,8 +64,9 @@ omamode default Qwen3.6-35B-A3B-Q4_K_M
 
 1. Click the 󰧑 / 󰊴 icon in the bar.
 2. Choose **Work** or **Gaming**.
-3. In work mode, pick a model and press **Load**, or **Unload** to free its memory.
-4. **Set as default** makes the selected model the one the dropdown opens on, the one `omamode load` and pi's prompt load, and pi's own default model.
+3. Pick the **agent** that uses the local model: pi or opencode (only installed ones are listed).
+4. Pick a **model**. In work mode it loads straight away (swapping out the loaded one) and becomes the default: the one the dropdown opens on, the one `omamode load` and pi's prompt load, and the agent's own default model. In gaming mode it only becomes the default.
+5. **Load** loads the default again after an **Unload**, which frees its memory.
 
 While omamode is busy (waiting for pi, unloading, loading, opening or closing Steam), the icon dims, the status line says what's happening, and the buttons are disabled. Long operations keep running if you close the panel.
 
@@ -94,8 +97,10 @@ Steam opened some other way while in work mode (not through the launcher) is not
 omamode status [--json]          current mode, loaded model, activity
 omamode models [--json]          models in the models folder
 omamode load [model]             load a model (the default if omitted); swaps if another is loaded
+omamode use <model>              make a model the default (also the agent's) and load it
 omamode unload                   unload the loaded model
-omamode default <model>          set the default model (also pi's default when pi uses llama.cpp)
+omamode default <model>          set the default model (also the agent's default)
+omamode agent [name|--json]      show or pick the agent that uses the local model (pi, opencode)
 omamode models-dir [path]        show the models folder, or set it (--use-server adopts the server's)
 omamode work [--confirmed]       switch to work mode (closes Steam; loads nothing)
 omamode gaming                   switch to gaming mode (unloads the model, opens Steam)
@@ -120,6 +125,7 @@ Exit codes: `0` ok, `1` failed, `2` usage error, `3` refused (another operation 
 | Key | Default | Meaning |
 |---|---|---|
 | `default_model` | `null` | Model loaded by `omamode load` and pi's prompt |
+| `agent` | `"pi"` | Agent whose default model follows omamode's: `pi` or `opencode` |
 | `models_dir` | `~/models` | Folder llama-server reads models from |
 | `port` | `8080` | llama-server port (pi's `llama.cpp` provider must use the same) |
 | `server_bin` | `~/strix-halo/vulkan/bin/llama-server` | llama-server binary omamode starts |
@@ -187,6 +193,9 @@ sudo limine-update
 Then reboot. `ttm.pages_limit` is in 4 KiB pages (GiB × 262144) and `amdgpu.gttsize` is in MiB. Leave enough memory for your desktop and apps.
 
 ## How it works with other tools
+
+- **pi** gets omamode's default as its `defaultModel` in `~/.pi/agent/settings.json`, but only while pi's default provider is `llama.cpp`. Its `llama.cpp` login must point at the same server (`/login llama.cpp`, then `http://127.0.0.1:<port>`); the pi extension warns when it doesn't.
+- **opencode** gets a `llama.cpp` provider in `~/.config/opencode/opencode.json` pointing at `http://127.0.0.1:<port>/v1`, listing the default model, and `model` set to `llama.cpp/<model>`. omamode owns that provider entry; your other settings and providers are kept, and the previous file is saved as `opencode.json.omamode-bak`. A file with comments (JSONC) is never rewritten.
 
 - **pi's `/llama` command** talks to the same server and can load models too. omamode always reads what is actually loaded, so the panel stays correct, but `/llama` doesn't know about gaming mode.
 - **Other scripts that start llama-server** (such as a personal `llama-local` script) work alongside omamode, as long as the server runs in router mode on the configured port. omamode won't stop a server it didn't start.

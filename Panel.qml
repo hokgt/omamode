@@ -5,7 +5,8 @@ import qs.Commons as Commons
 import qs.Ui
 
 // omamode bar button and panel: switch between work mode (local model) and
-// gaming mode (Steam), and load, unload or pick the default model.
+// gaming mode (Steam), pick the agent that uses the local model, and pick
+// a model (which loads it and makes it the default), or unload it.
 Panel {
   id: root
   moduleName: "hokgt.omamode"
@@ -24,6 +25,11 @@ Panel {
   readonly property var modelsDirInfo: st.modelsDir || ({})
   readonly property string modelsFolder: modelsDirInfo.path || ""
   readonly property bool folderMismatch: modelsDirInfo.mismatch === true
+  readonly property string agent: st.agent || ""
+  // Agents to offer: the installed ones, plus the selected one in any case.
+  readonly property var agentOptions: (st.agents || [])
+    .filter(function(a) { return a.installed || a.selected })
+    .map(function(a) { return { value: a.id, label: a.id } })
   property bool editingFolder: false
 
   function setModelsDir(path) {
@@ -33,8 +39,9 @@ Panel {
     service.run(["models-dir", p])
   }
 
-  // The model dropdown while the panel's content is loaded (used by tests).
+  // The dropdowns while the panel's content is loaded (used by tests).
   readonly property var modelDropdown: panel.loadedContent ? panel.loadedContent.modelDropdown : null
+  readonly property var agentDropdown: panel.loadedContent ? panel.loadedContent.agentDropdown : null
   readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
 
   Commons.Translations { id: strings; directory: Qt.resolvedUrl("i18n") }
@@ -79,6 +86,20 @@ Panel {
     return gaming ? strings.t("status.gamingHint") : strings.t("status.noModel")
   }
 
+  // Picking a model loads it and makes it the default (for the agent too).
+  // Picking the loaded default again does nothing.
+  function pickModel(id) {
+    selectedModel = id
+    var m = modelInfo(id)
+    if (!m || busy) return
+    if (m.default && service.loaded && service.loaded.id === id) return
+    service.run(["use", id])
+  }
+
+  function pickAgent(id) {
+    if (id && id !== agent && !busy) service.run(["agent", id])
+  }
+
   readonly property bool canLoad: {
     var m = modelInfo(selectedModel)
     return !gaming && !busy && !!m && m.complete && m.fits && !(service.loaded && service.loaded.id === selectedModel)
@@ -112,6 +133,7 @@ Panel {
 
     content: PanelKeyCatcher {
       property alias modelDropdown: modelDropdown
+      property alias agentDropdown: agentDropdown
       anchors.fill: parent
       implicitHeight: column.implicitHeight
       onCloseRequested: root.close()
@@ -187,15 +209,32 @@ Panel {
           onChanged: function(v) { if (v !== root.service.mode) root.service.run([v]) }
         }
 
+        // ---------- Agent ----------
+        Dropdown {
+          id: agentDropdown
+          width: parent.width
+          label: strings.t("agent.label")
+          enabled: !root.busy && root.agentOptions.length > 0
+          fontFamily: root.fontFamily
+          options: root.agentOptions
+          onChanged: function(v) { root.pickAgent(v) }
+        }
+
+        Binding {
+          target: agentDropdown
+          property: "value"
+          value: root.agent
+        }
+
         // ---------- Model ----------
         Dropdown {
           id: modelDropdown
           width: parent.width
           label: strings.t("model.label")
-          enabled: (root.service.models || []).length > 0
+          enabled: !root.busy && (root.service.models || []).length > 0
           fontFamily: root.fontFamily
           options: (root.service.models || []).map(function(m) { return { value: m.id, label: root.modelLabel(m) } })
-          onChanged: function(v) { root.selectedModel = v }
+          onChanged: function(v) { root.pickModel(v) }
         }
 
         // Dropdown assigns its own value when the user picks an entry, which
@@ -205,6 +244,17 @@ Panel {
           target: modelDropdown
           property: "value"
           value: root.selectedModel
+        }
+
+        Text {
+          visible: (root.service.models || []).length > 0
+          width: parent.width
+          textFormat: Text.PlainText
+          text: strings.t("model.hint").arg(root.agent || "the agent")
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          wrapMode: Text.Wrap
         }
 
         Text {
@@ -219,16 +269,6 @@ Panel {
 
         Row {
           spacing: Style.space(8)
-
-          Button {
-            text: strings.t("action.setDefault")
-            bordered: true
-            foreground: root.fg
-            fontFamily: root.fontFamily
-            enabled: !!root.selectedModel && !(root.modelInfo(root.selectedModel) || {}).default
-            opacity: enabled ? 1.0 : 0.5
-            onClicked: root.service.run(["default", root.selectedModel])
-          }
 
           Button {
             text: strings.t("action.load")
