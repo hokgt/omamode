@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "hokgt.omamode",
   "name": "omamode",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "hokgt",
   "license": "MIT",
   "description": "Work and gaming modes for Omarchy: switch between a local llama.cpp model and Steam from one bar button, so they never compete for unified memory.",
