@@ -43,6 +43,8 @@ om_fit_check() { # id [freed-bytes]
   local id="$1" freed="${2:-0}" size limit used allowance
   limit="$(om_gpu_limit_bytes)"
   [[ -n "$limit" ]] || return 0
+  # Already loaded (or loading): the memory in use is its own.
+  [[ "$(om_server_loaded 2>/dev/null)" == "$id" ]] && return 0
   size="$(om_model_bytes "$id")"
   [[ -n "$size" ]] || return 0
   used="$(om_gpu_used_bytes)"
@@ -50,7 +52,9 @@ om_fit_check() { # id [freed-bytes]
   awk -v s="$size" -v a="$allowance" -v l="$limit" -v u="${used:-0}" -v f="$freed" -v id="$id" '
     BEGIN {
       need = s + a * 1e9
-      avail = l - (u - f)
+      inuse = u - f
+      if (inuse < 0) inuse = 0
+      avail = l - inuse
       if (need <= avail) exit 0
       printf "%s needs ~%d GB; the GPU limit is %d GB\n", id, int(need / 1e9 + 0.5), int(l / 1e9)
       exit 3

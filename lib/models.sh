@@ -143,10 +143,14 @@ om_models_json() {
     | ($disk | map({(.id): .complete}) | add // {}) as $complete
     | ([$router[] | select(.status == "loaded" or .status == "loading") | .id][0]) as $loaded
     | def fits($id):
-        if $limit == "" or ($bytes[$id] | not) then true
+        # The loaded model fits by definition: the memory in use is its own.
+        # A swap frees the loaded model, counted by file size, which can be
+        # more than it uses (mmap), so never count beyond the GPU limit.
+        if $limit == "" or ($bytes[$id] | not) or $id == $loaded then true
         else
-          (if $loaded != null and $loaded != $id then ($bytes[$loaded] // 0) else 0 end) as $freed
-          | ($bytes[$id] + $allowance * 1e9) <= (($limit | tonumber) - (($used | tonumber) - $freed))
+          (if $loaded != null then ($bytes[$loaded] // 0) else 0 end) as $freed
+          | ([(($used | tonumber) - $freed), 0] | max) as $inUse
+          | ($bytes[$id] + $allowance * 1e9) <= (($limit | tonumber) - $inUse)
         end;
       [ $ids[] as $id | {
         id: $id,
